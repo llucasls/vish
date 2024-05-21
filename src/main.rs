@@ -1,30 +1,23 @@
-use std::io;
-use std::process::{Command,ExitCode};
+use std::io::{self, Write};
+use std::process::{Command, ExitCode};
 use std::collections::HashMap;
 use std::env;
 use std::os::unix::process::CommandExt;
+
+pub mod read_input;
+use self::read_input::read_input;
 
 fn print_prompt(shell_variables: &HashMap<String, String>) {
     match shell_variables.get("PS1") {
         Some(prompt) => eprint!("{}", prompt),
         None => eprint!(""),
     };
-}
-
-fn read_input(user_input: &mut String) -> usize {
-    let stdin = io::stdin();
-    match stdin.read_line(user_input) {
-        Ok(v) => v,
-        Err(_) => panic!("Can't read user input."),
-    }
+    let mut stdout = io::stdout();
+    stdout.flush().unwrap();
 }
 
 fn get_args(input: String) -> Vec<String> {
-    let mut cmdline_args: Vec<String> = vec![];
-    for arg in input.trim().split_whitespace() {
-        cmdline_args.push(arg.to_string());
-    }
-    cmdline_args
+    input.trim().split_whitespace().map(|s| s.to_string()).collect()
 }
 
 fn main() -> ExitCode {
@@ -58,8 +51,8 @@ fn main() -> ExitCode {
         let mut user_input = String::new();
         let input_size = read_input(&mut user_input);
 
-        if input_size == 0 {
-            break;
+        if input_size == -1 {
+            break; // End of input (Ctrl+D)
         } else if user_input.trim().is_empty() {
             continue;
         }
@@ -90,13 +83,13 @@ fn main() -> ExitCode {
                 let status = Command::new(command)
                     .args(argv)
                     .spawn()
-                    .expect("failed")
+                    .expect("failed to execute command")
                     .wait()
-                    .unwrap();
+                    .expect("failed to wait on child process");
 
-                match status.code() {
-                    Some(code) => { exit_status = ExitCode::from(code as u8); },
-                    None => { exit_status = ExitCode::from(128); },
+                exit_status = match status.code() {
+                    Some(code) => ExitCode::from(code as u8),
+                    None => ExitCode::from(128),
                 };
             }
         }
