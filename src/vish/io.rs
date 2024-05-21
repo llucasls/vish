@@ -1,6 +1,14 @@
 use std::io::{self, Read, Write};
 use termios::{tcsetattr, Termios, ECHO, ICANON, TCSANOW, VEOF};
 
+const NEWLINE: u8 = b'\n';
+const BACKSPACE: u8 = 127;
+const ESCAPE: u8 = b'\x1b';
+
+fn delete_previous_char() {
+    print!("\x08 \x08");
+}
+
 pub fn read_input(input: &mut String) -> isize {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -10,7 +18,6 @@ pub fn read_input(input: &mut String) -> isize {
 
     let eof_char = termios.c_cc[VEOF];
 
-    // Disable canonical mode and echo
     termios.c_lflag &= !(ICANON | ECHO);
     tcsetattr(0, TCSANOW, &termios).unwrap();
 
@@ -19,31 +26,27 @@ pub fn read_input(input: &mut String) -> isize {
     for byte in stdin.bytes() {
         let byte = byte.unwrap();
         if escape_sequence {
-            // Check for the second and third characters of the escape sequence
             if byte == b'[' {
-                // Consume and ignore the rest of the escape sequence
                 continue;
             } else if byte >= b'A' && byte <= b'D' {
                 escape_sequence = false;
                 continue;
             }
-        } else if byte == b'\x1b' {
-            // Start of an escape sequence
+        } else if byte == ESCAPE {
             escape_sequence = true;
             continue;
-        } else if byte == b'\n' {
+        } else if byte == NEWLINE {
             break;
         } else if byte == eof_char {
             if count == 0 {
                 tcsetattr(0, TCSANOW, &original_termios).unwrap();
-                return -1; // Signal that Ctrl+D was pressed with no input
+                return -1;
             }
-        } else if byte == 127 {
-            // Handle backspace (127 is ASCII for backspace)
+        } else if byte == BACKSPACE {
             if !input.is_empty() {
                 input.pop();
                 count -= 1;
-                print!("\x08 \x08"); // Move cursor back, print space, move cursor back again
+                delete_previous_char();
                 stdout.flush().unwrap();
             }
         } else {

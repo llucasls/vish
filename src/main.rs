@@ -53,7 +53,7 @@ fn main() -> ExitCode {
         let input_size = read_input(&mut user_input);
 
         if input_size == -1 {
-            break; // End of input (Ctrl+D)
+            break;
         } else if user_input.trim().is_empty() {
             continue;
         }
@@ -94,7 +94,6 @@ fn main() -> ExitCode {
                 };
             }
         }
-
     }
 
     exit_status
