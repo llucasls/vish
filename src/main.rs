@@ -61,6 +61,7 @@ fn main() -> ExitCode {
         let cmdline_args = get_args(user_input);
         let command = cmdline_args[0].clone();
 
+        println!();
         match command.trim() {
             "exit" => {
                 if cmdline_args.len() > 1 {
