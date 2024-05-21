@@ -4,8 +4,9 @@ use std::collections::HashMap;
 use std::env;
 use std::os::unix::process::CommandExt;
 
-pub mod read_input;
-use self::read_input::read_input;
+mod vish;
+
+use vish::io::read_input;
 
 fn print_prompt(shell_variables: &HashMap<String, String>) {
     match shell_variables.get("PS1") {
