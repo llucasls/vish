@@ -162,26 +162,28 @@ impl InputReader {
                 continue;
             }
 
-            match moved(vec![27, 91, byte]) {
-                UP => {
-                    inner_vector.clear();
-                    continue;
-                },
-                DOWN => {
-                    inner_vector.clear();
-                    continue;
-                },
-                LEFT => {
-                    inner_vector.clear();
-                    move_left()?;
-                    continue;
-                },
-                RIGHT => {
-                    inner_vector.clear();
-                    move_right()?;
-                    continue;
-                },
-                _ => {},
+            if !inner_vector.is_empty() {
+                match moved(vec![27, 91, byte]) {
+                    UP => {
+                        inner_vector.clear();
+                        continue;
+                    },
+                    DOWN => {
+                        inner_vector.clear();
+                        continue;
+                    },
+                    LEFT => {
+                        inner_vector.clear();
+                        move_left()?;
+                        continue;
+                    },
+                    RIGHT => {
+                        inner_vector.clear();
+                        move_right()?;
+                        continue;
+                    },
+                    _ => {},
+                }
             }
 
             if byte == NEWLINE || byte == eof_char {
