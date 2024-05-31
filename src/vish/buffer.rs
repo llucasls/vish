@@ -37,6 +37,11 @@ impl Buffer {
         self.cursor.get_ref().len()
     }
 
+    // Return true if vector is empty
+    pub fn is_empty(&self) -> bool {
+        self.cursor.get_ref().is_empty()
+    }
+
     // Return the byte at the current position
     pub fn byte(&self) -> Option<Byte> {
         let pos = self.position() as usize;
@@ -131,6 +136,12 @@ impl Buffer {
         self.get_ref().iter()
     }
 
+    // Remove all values
+    pub fn clear(&mut self) {
+        self.get_mut().clear();
+        self.set_position(0);
+    }
+
     // Consume buffer and return inner vector
     pub fn into_inner(self) -> Vec<Byte> {
         self.cursor.into_inner()
@@ -143,5 +154,11 @@ impl fmt::Debug for Buffer {
             .field("inner", &self.cursor.get_ref())
             .field("pos", &self.cursor.position())
             .finish()
+    }
+}
+
+impl Default for Buffer {
+    fn default() -> Self {
+        Self::new()
     }
 }
