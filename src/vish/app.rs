@@ -1,20 +1,73 @@
 use std::process::ExitCode;
-use std::io;
+use std::io::{self, Write};
 
 use super::io::InputReader;
+use super::buffer::Buffer;
+use super::command as cmd;
+use super::environment::ShellEnvironment as Env;
 
 fn cleanup_input(reader: &mut InputReader) -> io::Result<()> {
     reader.disable_raw_mode()
 }
 
-pub fn handle_interactive_mode(reader: &mut InputReader) -> ExitCode {
-    if let Err(_) = reader.enable_raw_mode() {
+fn draw_prompt(stdout: &mut io::Stdout, env: &Env) -> io::Result<()> {
+    let unset_value = String::new();
+    let ps1 = env.shell_variables.get("PS1").unwrap_or(&unset_value);
+    stdout.write_all(ps1.as_bytes())?;
+    stdout.flush()
+}
+
+fn draw_newline(stdout: &mut io::Stdout) -> io::Result<()> {
+    stdout.write_all(b"\n")?;
+    stdout.flush()
+}
+
+pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
+    if reader.enable_raw_mode().is_err() {
         return handle_fallback_mode();
     }
 
-    // read and execute commands from terminal
+    let mut buffer = Buffer::new();
+    let mut stdout = io::stdout();
+    let mut last_cmd_code: u8 = 0;
+    let exit_code: u8 = loop {
+        if draw_prompt(&mut stdout, &env).is_err() { return 1.into(); }
+
+        buffer.clear();
+        match reader.read_input(&mut buffer) {
+            Ok(Some(())) => {},
+            Ok(None) => { break 0; },
+            Err(e) => { eprintln!("{}", e); return 1.into(); },
+        }
+        let mut argv = Vec::new();
+        match buffer.as_str() {
+            Ok(text) => {
+                for arg in text.split_whitespace() {
+                    argv.push(arg);
+                }
+                if argv.is_empty() {
+                    if draw_newline(&mut stdout).is_err() { return 1.into(); }
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("{:?}", e);
+                return 1.into();
+            }
+        }
+        if draw_newline(&mut stdout).is_err() { return 1.into(); }
+        last_cmd_code = match argv[0] {
+            "cd" => cmd::cd(argv),
+            "pwd" => cmd::pwd(argv),
+            "printf" => cmd::printf(argv),
+            "exec" => cmd::exec(argv, reader),
+            "exit" => { break cmd::exit(argv, last_cmd_code); },
+            _ => cmd::run_command(&mut argv),
+        };
+    };
+
     match cleanup_input(reader) {
-        Ok(_) => 0.into(),
+        Ok(_) => exit_code.into(),
         Err(_) => 1.into(),
     }
 }
