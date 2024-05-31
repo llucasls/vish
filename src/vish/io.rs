@@ -308,3 +308,27 @@ mod handle_werase_byte {
         assert_handle_werase_byte(bytes, EMPTY);
     }
 }
+
+fn replace_tilde(user_input: &str) -> &str {
+    user_input
+}
+
+#[cfg(test)]
+mod replace_tilde {
+    use std::env;
+
+    use super::replace_tilde;
+
+    #[test]
+    fn replace_single_tilde_with_home() {
+        let home = env::var("HOME").unwrap();
+        let output = replace_tilde("~");
+        assert_eq!(output, home);
+    }
+
+    #[test]
+    fn replace_tilde_for_root() {
+        let output = replace_tilde("~root");
+        assert_eq!(output, "/root");
+    }
+}
