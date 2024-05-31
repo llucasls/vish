@@ -115,7 +115,7 @@ impl InputReader {
         }
     }
 
-    pub fn read_input(&mut self, buffer: &mut Buffer) -> io::Result<()> {
+    pub fn read_input(&mut self, buffer: &mut Buffer) -> io::Result<Option<()>> {
         let eof_char = self.termios.c_cc[VEOF];
         let erase_char = self.termios.c_cc[VERASE];
         let werase_char = self.termios.c_cc[VWERASE];
@@ -186,19 +186,20 @@ impl InputReader {
                 }
             }
 
-            if byte == NEWLINE || byte == eof_char {
+            if byte == eof_char {
+                return Ok(None);
+            }
+
+            if byte == NEWLINE {
                 break;
             }
 
             inner_vector.push(byte);
-            match std::str::from_utf8(inner_vector.as_slice()) {
-                Ok(_) => {
-                    outer_vector.push(inner_vector.clone());
-                    self.stdout.write(inner_vector.as_slice())?;
-                    self.stdout.flush()?;
-                    inner_vector.clear();
-                },
-                Err(_) => {},
+            if std::str::from_utf8(inner_vector.as_slice()).is_ok() {
+                outer_vector.push(inner_vector.clone());
+                self.stdout.write_all(inner_vector.as_slice())?;
+                self.stdout.flush()?;
+                inner_vector.clear();
             }
         }
 
@@ -208,7 +209,7 @@ impl InputReader {
             }
         }
 
-        Ok(())
+        Ok(Some(()))
     }
 }
 
