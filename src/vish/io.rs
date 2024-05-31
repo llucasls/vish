@@ -22,25 +22,25 @@ enum Directional {
 
 fn delete_previous_char() -> io::Result<()> {
     let mut stdout = io::stdout();
-    stdout.write(b"\x08 \x08")?;
+    stdout.write_all(b"\x08 \x08")?;
     stdout.flush()
 }
 
 fn move_left() -> io::Result<()> {
     let mut stdout = io::stdout();
-    stdout.write(b"\x1b[D")?;
+    stdout.write_all(b"\x1b[D")?;
     stdout.flush()
 }
 
 fn move_right() -> io::Result<()> {
     let mut stdout = io::stdout();
-    stdout.write(b"\x1b[C")?;
+    stdout.write_all(b"\x1b[C")?;
     stdout.flush()
 }
 
 fn kill_line() -> io::Result<()> {
     let mut stdout = io::stdout();
-    stdout.write(b"\x1b[2K\r")?;
+    stdout.write_all(b"\x1b[2K\r")?;
     stdout.flush()
 }
 
@@ -48,13 +48,13 @@ fn reprint_line(data_list: &Vec<Vec<u8>>) -> io::Result<()> {
     let mut stdout = io::stdout();
     kill_line()?;
     for vec in data_list {
-        stdout.write(vec.as_slice())?;
+        stdout.write_all(vec.as_slice())?;
     }
     stdout.flush()
 }
 
 fn handle_werase_byte(bytes: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
-    if bytes.len() == 0 {
+    if bytes.is_empty() {
         return bytes;
     }
 
@@ -94,7 +94,7 @@ pub struct InputReader {
 impl InputReader {
     pub fn new() -> io::Result<Self> {
         let termios = Termios::from_fd(0)?;
-        let default = termios.clone();
+        let default = termios;
         let stdin = io::stdin();
         let stdout = io::stdout();
 
@@ -157,7 +157,7 @@ impl InputReader {
                 continue;
             }
 
-            if byte == 91 && inner_vector.len() > 0 && inner_vector[0] == 27 {
+            if byte == 91 && !inner_vector.is_empty() && inner_vector[0] == 27 {
                 inner_vector.push(byte);
                 continue;
             }
