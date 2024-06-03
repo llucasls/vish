@@ -61,6 +61,8 @@ dependencies = [
 name = "vish"
 version = "0.1.0"
 dependencies = [
+ "cc",
+ "libc",
  "sqlite",
  "termios",
 ]

@@ -309,8 +309,43 @@ mod handle_werase_byte {
     }
 }
 
-fn replace_tilde(user_input: &str) -> &str {
-    user_input
+pub fn replace_tilde(user_input: String) -> String {
+    let tilde_index = user_input.find('~');
+    let bar_index = user_input.find('/');
+    if tilde_index.is_none() {
+        user_input
+    } else if user_input == "~" || user_input.find("~/") == Some(0) {
+        match std::env::var("HOME") {
+            Ok(home) => {
+                let mut output = user_input.clone();
+                output.replace_range(0..1, home.as_str());
+                output
+            },
+            Err(_) => user_input,
+        }
+    } else if tilde_index == Some(0) && bar_index != Some(1) {
+        let user = match bar_index {
+            Some(end) => user_input[1..end].to_string(),
+            None => user_input[1..].to_string(),
+        };
+        match super::passwd::get_home(user) {
+            Some(home) => {
+                let mut output = user_input.clone();
+                match bar_index {
+                    Some(i) => {
+                        output.replace_range(0..i, home.as_str());
+                    },
+                    None => {
+                        output.replace_range(0.., home.as_str());
+                    },
+                }
+                output
+            },
+            None => user_input,
+        }
+    } else {
+        user_input
+    }
 }
 
 #[cfg(test)]
@@ -322,13 +357,26 @@ mod replace_tilde {
     #[test]
     fn replace_single_tilde_with_home() {
         let home = env::var("HOME").unwrap();
-        let output = replace_tilde("~");
+        let output = replace_tilde(String::from("~"));
         assert_eq!(output, home);
     }
 
     #[test]
+    fn replace_single_tilde_with_home_subdir() {
+        let home = env::var("HOME").unwrap();
+        let output = replace_tilde(String::from("~/.config"));
+        assert_eq!(output, format!("{}/.config", home));
+    }
+
+    #[test]
     fn replace_tilde_for_root() {
-        let output = replace_tilde("~root");
+        let output = replace_tilde(String::from("~root"));
         assert_eq!(output, "/root");
+    }
+
+    #[test]
+    fn replace_tilde_for_root_subdir() {
+        let output = replace_tilde(String::from("~root/.config"));
+        assert_eq!(output, "/root/.config");
     }
 }
