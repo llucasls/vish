@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use super::buffer::Buffer;
 use super::io::InputReader;
 
-pub type ArgV<'a> = Vec<&'a str>;
+pub type ArgV = Vec<String>;
 pub enum ShellCommand {
     SpBuiltin(String),
     Builtin(String),
@@ -22,7 +22,7 @@ pub enum ShellCommand {
 }
 
 pub fn run_command(argv: &mut ArgV) -> u8 {
-    let mut command = Command::new(argv[0]);
+    let mut command = Command::new(argv[0].clone());
     if argv.len() > 1 {
         command.args(&mut argv[1..]);
     }
@@ -39,7 +39,7 @@ pub fn cd(argv: ArgV) -> u8 {
             1
         },
         Ordering::Equal => {
-            let name = argv[1];
+            let name = &argv[1];
             let mut path_buf = PathBuf::new();
             let mut cur_dir: PathBuf = PathBuf::new();
             match current_dir() {
@@ -153,7 +153,7 @@ pub fn exec(argv: ArgV, reader: &mut InputReader) -> u8 {
         return 1;
     }
 
-    let err = Command::new(argv[1])
+    let err = Command::new(argv[1].clone())
         .args(&argv[2..])
         .exec();
     if reader.enable_raw_mode().is_err() {

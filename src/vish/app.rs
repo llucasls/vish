@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 use std::io::{self, Write};
 
-use super::io::InputReader;
+use super::io::{InputReader, replace_tilde};
 use super::buffer::Buffer;
 use super::command as cmd;
 use super::environment::ShellEnvironment as Env;
@@ -46,11 +46,11 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
             Err(e) => { eprintln!("{}", e); return 1.into(); },
         }
 
-        let mut argv: Vec<&str> = Vec::new();
+        let mut argv: cmd::ArgV = Vec::new();
         match buffer.as_str() {
             Ok(text) => {
                 for arg in text.split_whitespace() {
-                    argv.push(arg);
+                    argv.push(replace_tilde(String::from(arg)));
                 }
                 if argv.is_empty() {
                     draw_newline!(stdout);
@@ -65,7 +65,7 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
 
         draw_newline!(stdout);
 
-        last_cmd_code = match argv[0] {
+        last_cmd_code = match argv[0].as_str() {
             "cd" => cmd::cd(argv),
             "pwd" => cmd::pwd(argv),
             "printf" => cmd::printf(argv),
