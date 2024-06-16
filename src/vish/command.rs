@@ -61,11 +61,15 @@ pub fn cd(argv: ArgV) -> u8 {
                     }
                 }
             } else {
-                for dir in argv[1].split('/') {
-                    if dir == ".." {
-                        path_buf.pop();
-                    } else {
-                        path_buf.push(dir);
+                match argv[1].find('/') {
+                    Some(0) => {
+                        path_buf.clear();
+                        path_buf.push(argv[1].clone());
+                    },
+                    _ => {
+                        for dir in argv[1].split('/') {
+                            path_buf.push(dir);
+                        }
                     }
                 }
             }
