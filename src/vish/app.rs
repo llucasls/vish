@@ -22,6 +22,12 @@ fn draw_newline(stdout: &mut io::Stdout) -> io::Result<()> {
     stdout.flush()
 }
 
+macro_rules! draw_newline {
+    ($stdout:expr) => {
+        if draw_newline(&mut $stdout).is_err() { return 1.into(); }
+    };
+}
+
 pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
     if reader.enable_raw_mode().is_err() {
         return handle_fallback_mode();
@@ -39,14 +45,15 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
             Ok(None) => { break 0; },
             Err(e) => { eprintln!("{}", e); return 1.into(); },
         }
-        let mut argv = Vec::new();
+
+        let mut argv: Vec<&str> = Vec::new();
         match buffer.as_str() {
             Ok(text) => {
                 for arg in text.split_whitespace() {
                     argv.push(arg);
                 }
                 if argv.is_empty() {
-                    if draw_newline(&mut stdout).is_err() { return 1.into(); }
+                    draw_newline!(stdout);
                     continue;
                 }
             },
@@ -55,7 +62,9 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
                 return 1.into();
             }
         }
-        if draw_newline(&mut stdout).is_err() { return 1.into(); }
+
+        draw_newline!(stdout);
+
         last_cmd_code = match argv[0] {
             "cd" => cmd::cd(argv),
             "pwd" => cmd::pwd(argv),
