@@ -309,13 +309,19 @@ mod handle_werase_byte {
     }
 }
 
+#[cfg(not(test))]
+use super::passwd::get_home;
+
+#[cfg(not(test))]
+use std::env::var as get_var;
+
 pub fn replace_tilde(user_input: String) -> String {
     let tilde_index = user_input.find('~');
     let bar_index = user_input.find('/');
     if tilde_index.is_none() {
         user_input
     } else if user_input == "~" || user_input.find("~/") == Some(0) {
-        match std::env::var("HOME") {
+        match get_var("HOME") {
             Ok(home) => {
                 let mut output = user_input.clone();
                 output.replace_range(0..1, home.as_str());
@@ -328,7 +334,7 @@ pub fn replace_tilde(user_input: String) -> String {
             Some(end) => user_input[1..end].to_string(),
             None => user_input[1..].to_string(),
         };
-        match super::passwd::get_home(user) {
+        match get_home(user) {
             Some(home) => {
                 let mut output = user_input.clone();
                 match bar_index {
@@ -349,34 +355,75 @@ pub fn replace_tilde(user_input: String) -> String {
 }
 
 #[cfg(test)]
-mod replace_tilde {
-    use std::env;
+fn get_home(user: String) -> Option<String> {
+    let mut home_dirs = std::collections::HashMap::new();
+    home_dirs.insert(String::from("root"), String::from("/root"));
+    home_dirs.insert(String::from("john"), String::from("/home/john"));
+    home_dirs.get(&user).cloned()
+}
 
+#[cfg(test)]
+fn get_var(_home: &str) -> Result<String, std::env::VarError> {
+    Ok(String::from("/home/karl"))
+}
+
+#[cfg(test)]
+mod replace_tilde {
     use super::replace_tilde;
 
     #[test]
     fn replace_single_tilde_with_home() {
-        let home = env::var("HOME").unwrap();
-        let output = replace_tilde(String::from("~"));
-        assert_eq!(output, home);
+        let input = String::from("~");
+        let output = replace_tilde(input.clone());
+        let expected = "/home/karl";
+        assert_eq!(output, expected, "\n input: `{:?}`", input);
     }
 
     #[test]
     fn replace_single_tilde_with_home_subdir() {
-        let home = env::var("HOME").unwrap();
-        let output = replace_tilde(String::from("~/.config"));
-        assert_eq!(output, format!("{}/.config", home));
+        let input = String::from("~/.config");
+        let output = replace_tilde(input.clone());
+        let expected = "/home/karl/.config";
+        assert_eq!(output, expected, "\n input: `{:?}`", input);
+    }
+
+    #[test]
+    fn replace_tilde_for_user() {
+        let input = String::from("~john");
+        let output = replace_tilde(input.clone());
+        let expected = "/home/john";
+        assert_eq!(output, expected, "\n input: `{:?}`", input);
+    }
+
+    #[test]
+    fn replace_tilde_for_user_subdir() {
+        let input = String::from("~john/.config");
+        let output = replace_tilde(input.clone());
+        let expected = "/home/john/.config";
+        assert_eq!(output, expected, "\n input: `{:?}`", input);
     }
 
     #[test]
     fn replace_tilde_for_root() {
-        let output = replace_tilde(String::from("~root"));
-        assert_eq!(output, "/root");
+        let input = String::from("~root");
+        let output = replace_tilde(input.clone());
+        let expected = "/root";
+        assert_eq!(output, expected, "\n input: `{:?}`", input);
     }
 
     #[test]
     fn replace_tilde_for_root_subdir() {
-        let output = replace_tilde(String::from("~root/.config"));
-        assert_eq!(output, "/root/.config");
+        let input = String::from("~root/.config");
+        let output = replace_tilde(input.clone());
+        let expected = "/root/.config";
+        assert_eq!(output, expected, "\n input: `{:?}`", input);
+    }
+
+    #[test]
+    fn do_not_replace() {
+        let input = String::from("/usr/local");
+        let output = replace_tilde(input.clone());
+        let expected = "/usr/local";
+        assert_eq!(output, expected, "\n input: `{:?}`", input);
     }
 }
