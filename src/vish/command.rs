@@ -21,6 +21,10 @@ pub enum ShellCommand {
     Variable(String, String),
 }
 
+macro_rules! error_msg {
+    ($err:ident) => { $err.to_string().split(" (").collect::<Vec<_>>()[0] }
+}
+
 pub fn run_command(argv: &mut ArgV) -> u8 {
     let mut command = Command::new(argv[0].clone());
     if argv.len() > 1 {
@@ -75,8 +79,8 @@ pub fn cd(argv: ArgV) -> u8 {
             }
 
             let path = path_buf.as_path();
-            if set_current_dir(path).is_err() {
-                eprintln!("vish: cd: {} - No such file or directory", name);
+            if let Err(e) = set_current_dir(path) {
+                eprintln!("vish: cd: {} - {}", name, error_msg!(e));
                 1
             } else {
                 env::set_var("PWD", path);
