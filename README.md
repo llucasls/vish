@@ -29,7 +29,7 @@ https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18
 - [ ] cd
 - [ ] command
 - [ ] echo
-- [ ] false
+- [x] false
 - [ ] fc
 - [ ] fg
 - [ ] getopts
@@ -40,7 +40,7 @@ https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18
 - [ ] pwd
 - [ ] read
 - [ ] test
-- [ ] true
+- [x] true
 - [ ] type
 - [ ] ulimit
 - [ ] umask

@@ -72,6 +72,8 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
             "exec" => cmd::exec(argv, reader),
             "exit" => { break cmd::exit(argv, last_cmd_code); },
             _ => cmd::run_command(&mut argv),
+            "true" => 0,
+            "false" => 1,
         };
     };
 
