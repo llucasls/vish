@@ -28,7 +28,7 @@ https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18
 - [ ] bg
 - [ ] cd
 - [ ] command
-- [ ] echo
+- [x] echo
 - [x] false
 - [ ] fc
 - [ ] fg

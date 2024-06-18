@@ -152,6 +152,18 @@ pub fn printf(argv: ArgV) -> u8 {
     0
 }
 
+pub fn echo(argv: ArgV) -> u8 {
+    let size = argv.len();
+    if size > 1 {
+        for arg in &argv[1..(size - 1)] {
+            print!("{} ", arg);
+        }
+        print!("{}", argv[size - 1]);
+    }
+    println!();
+    0
+}
+
 pub fn exec(argv: ArgV, reader: &mut InputReader) -> u8 {
     if argv.len() < 2 {
         eprintln!("vish: exec: no command passed to exec");
