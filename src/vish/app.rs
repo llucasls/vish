@@ -42,7 +42,7 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
         buffer.clear();
         match reader.read_input(&mut buffer) {
             Ok(Some(())) => {},
-            Ok(None) => { break 0; },
+            Ok(None) => { draw_newline!(stdout); break last_cmd_code; },
             Err(e) => { eprintln!("{}", e); return 1.into(); },
         }
 
