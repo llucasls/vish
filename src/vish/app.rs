@@ -62,17 +62,8 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
             continue;
         }
 
-        match quote_char {
-            Some('\'') => {
-                match buffer.write(b"\n") {
-                    Ok(_) => {},
-                    Err(_) => { return 1.into(); }
-                };
-                draw_newline!(stdout);
-                should_clear_buffer = false;
-                continue;
-            },
-            Some('"') => {
+       match quote_char {
+            Some('\'') | Some('"') => {
                 match buffer.write(b"\n") {
                     Ok(_) => {},
                     Err(_) => { return 1.into(); }
