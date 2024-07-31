@@ -25,10 +25,11 @@ macro_rules! error_msg {
     ($err:ident) => { $err.to_string().split(" (").collect::<Vec<_>>()[0] }
 }
 
-pub fn run_command(argv: &mut ArgV) -> u8 {
+pub fn run_command(argv: ArgV) -> u8 {
+    let size = argv.len();
     let mut command = Command::new(argv[0].clone());
-    if argv.len() > 1 {
-        command.args(&mut argv[1..]);
+    if size > 1 {
+        command.args(argv[1..].to_vec());
     }
     match command.status() {
         Ok(status) => status.code().unwrap_or(1) as u8,
@@ -235,6 +236,29 @@ fn replace_escape_sequence(input: &Vec<u8>) -> Vec<u8> {
     }
 
     output
+}
+
+#[cfg(test)]
+mod replace_escape_sequence {
+    use super::replace_escape_sequence;
+
+    #[test]
+    fn replace_hex_escape() {
+        let input = &br"\x1b[".to_vec();
+        assert_eq!(replace_escape_sequence(input), b"\x1b[");
+    }
+
+    #[test]
+    fn replace_oct_escape() {
+        let input = &br"\033[".to_vec();
+        assert_eq!(replace_escape_sequence(input), b"\x1b[");
+    }
+
+    #[test]
+    fn replace_char_escape() {
+        let input = &br"\e[".to_vec();
+        assert_eq!(replace_escape_sequence(input), b"\x1b[");
+    }
 }
 
 fn print_os_string(text: OsString) {

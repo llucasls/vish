@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 use std::io::{self, Write};
 
-use super::io::{InputReader, replace_tilde};
+use super::io::{InputReader, parse_argv};
 use super::buffer::Buffer;
 use super::command as cmd;
 use super::environment::ShellEnvironment as Env;
@@ -36,31 +36,48 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
     let mut buffer = Buffer::new();
     let mut stdout = io::stdout();
     let mut last_cmd_code: u8 = 0;
+    let mut should_clear_buffer = true;
     let exit_code: u8 = loop {
         if draw_prompt(&mut stdout, &env).is_err() { return 1.into(); }
 
-        buffer.clear();
+        if should_clear_buffer {
+            buffer.clear();
+        }
         match reader.read_input(&mut buffer) {
             Ok(Some(())) => {},
             Ok(None) => { draw_newline!(stdout); break last_cmd_code; },
             Err(e) => { eprintln!("{}", e); return 1.into(); },
         }
 
-        let mut argv: cmd::ArgV = Vec::new();
-        match buffer.as_str() {
-            Ok(text) => {
-                for arg in text.split_whitespace() {
-                    argv.push(replace_tilde(String::from(arg)));
-                }
-                if argv.is_empty() {
-                    draw_newline!(stdout);
-                    continue;
-                }
-            },
+        let (argv, quote_char) = match buffer.as_str() {
+            Ok(text) => parse_argv(text),
             Err(e) => {
-                eprintln!("{:?}", e);
+                eprintln!("{}", e);
                 return 1.into();
             }
+        };
+
+        match quote_char {
+            Some('\'') => {
+                match buffer.write(b"\n") {
+                    Ok(_) => {},
+                    Err(_) => { return 1.into(); }
+                };
+                draw_newline!(stdout);
+                should_clear_buffer = false;
+                continue;
+            },
+            Some('"') => {
+                match buffer.write(b"\n") {
+                    Ok(_) => {},
+                    Err(_) => { return 1.into(); }
+                };
+                draw_newline!(stdout);
+                should_clear_buffer = false;
+                continue;
+            },
+            Some(_) => { return 1.into(); },
+            None => { should_clear_buffer = true; }
         }
 
         draw_newline!(stdout);
@@ -72,9 +89,9 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
             "echo" => cmd::echo(argv),
             "exec" => cmd::exec(argv, reader),
             "exit" => { break cmd::exit(argv, last_cmd_code); },
-            _ => cmd::run_command(&mut argv),
             "true" => 0,
             "false" => 1,
+            _ => cmd::run_command(argv),
         };
     };
 

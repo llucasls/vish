@@ -4,6 +4,7 @@ use termios::*;
 use termios::os::target::{VWERASE, VREPRINT};
 
 use super::buffer::Buffer;
+use super::command::ArgV;
 
 const NEWLINE: u8 = b'\n';
 
@@ -425,5 +426,125 @@ mod replace_tilde {
         let output = replace_tilde(input.clone());
         let expected = "/usr/local";
         assert_eq!(output, expected, "\n input: `{:?}`", input);
+    }
+}
+
+pub fn parse_argv(text: &str) -> (ArgV, Option<char>) {
+    let mut argv: ArgV = Vec::new();
+    let mut in_quotes = false;
+    let mut current_arg = String::new();
+    let mut quote_char = '\0';
+
+    for c in text.chars() {
+        match c {
+            '\'' | '"' if !in_quotes => {
+                in_quotes = true;
+                quote_char = c;
+            },
+            '\'' | '"' if in_quotes && c == quote_char => {
+                in_quotes = false;
+                argv.push(replace_tilde(current_arg.clone()));
+                current_arg.clear();
+            },
+            ' ' | '\t' if !in_quotes && !current_arg.is_empty() => {
+                argv.push(replace_tilde(current_arg.clone()));
+                current_arg.clear();
+            },
+            ' ' | '\t' if !in_quotes && current_arg.is_empty() => {},
+            _ => {
+                current_arg.push(c);
+            }
+        }
+    }
+
+    if !current_arg.is_empty() {
+        argv.push(replace_tilde(current_arg));
+    }
+
+    if in_quotes {
+        (argv, Some(quote_char))
+    } else {
+        (argv, None)
+    }
+}
+
+#[cfg(test)]
+mod parse_argv {
+    use super::parse_argv;
+
+    #[test]
+    fn parse_argv_basic() {
+        let input = "echo hello world";
+        let expected = vec!["echo", "hello", "world"];
+        let (result, quote_char) = parse_argv(input);
+        assert_eq!(result, expected);
+        assert_eq!(quote_char, None);
+    }
+
+    #[test]
+    fn parse_argv_with_tilde() {
+        let input = "cd ~";
+        let expected = vec!["cd", "/home/kevin"];
+        let (result, quote_char) = parse_argv(input);
+        assert_eq!(result, expected);
+        assert_eq!(quote_char, None);
+    }
+
+    #[test]
+    fn parse_argv_with_tilde_and_path() {
+        let input = "cd ~/projects";
+        let expected = vec!["cd", "/home/kevin/projects"];
+        let (result, quote_char) = parse_argv(input);
+        assert_eq!(result, expected);
+        assert_eq!(quote_char, None);
+    }
+
+    #[test]
+    fn parse_argv_with_quoted_string() {
+        let input = "echo \"hello world\"";
+        let expected = vec!["echo", "hello world"];
+        let (result, quote_char) = parse_argv(input);
+        assert_eq!(result, expected);
+        assert_eq!(quote_char, None);
+    }
+
+    #[test]
+    fn parse_argv_with_multiple_quoted_strings() {
+        let input = "echo \"hello world\" 'and universe'";
+        let expected = vec!["echo", "hello world", "and universe"];
+        let (result, quote_char) = parse_argv(input);
+        assert_eq!(result, expected);
+        assert_eq!(quote_char, None);
+    }
+
+    #[test]
+    fn parse_argv_with_quotes_and_tilde() {
+        let input = "cp \"~john/file with spaces.txt\" ~john/backup/";
+        let expected = vec![
+            "cp",
+            "/home/john/file with spaces.txt",
+            "/home/john/backup/",
+        ];
+        let (result, quote_char) = parse_argv(input);
+        assert_eq!(result, expected);
+        assert_eq!(quote_char, None);
+    }
+
+    #[test]
+    fn parse_argv_with_single_quotes() {
+        let input = "touch 'test output.log'";
+        let expected = vec!["touch", "test output.log"];
+        let (result, quote_char) = parse_argv(input);
+        assert_eq!(result, expected);
+        assert_eq!(quote_char, None);
+    }
+
+    #[test]
+    fn parse_argv_with_empty_string() {
+        let input = "";
+        let expected: Vec<String> = Vec::new();
+        let (result, quote_char) = parse_argv(input);
+        assert_eq!(result, expected);
+        assert_eq!(quote_char, None);
     }
 }
