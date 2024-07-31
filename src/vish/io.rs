@@ -363,8 +363,8 @@ fn get_home(user: String) -> Option<String> {
 }
 
 #[cfg(test)]
-fn get_var(_home: &str) -> Result<String, std::env::VarError> {
-    Ok(String::from("/home/karl"))
+fn get_var(_: &str) -> Result<String, std::env::VarError> {
+    Ok(String::from("/home/kevin"))
 }
 
 #[cfg(test)]
@@ -375,7 +375,7 @@ mod replace_tilde {
     fn replace_single_tilde_with_home() {
         let input = String::from("~");
         let output = replace_tilde(input.clone());
-        let expected = "/home/karl";
+        let expected = "/home/kevin";
         assert_eq!(output, expected, "\n input: `{:?}`", input);
     }
 
@@ -383,7 +383,7 @@ mod replace_tilde {
     fn replace_single_tilde_with_home_subdir() {
         let input = String::from("~/.config");
         let output = replace_tilde(input.clone());
-        let expected = "/home/karl/.config";
+        let expected = "/home/kevin/.config";
         assert_eq!(output, expected, "\n input: `{:?}`", input);
     }
 
