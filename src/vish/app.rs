@@ -47,10 +47,11 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
     let mut last_cmd_code: u8 = 0;
     let mut should_clear_buffer = true;
     let exit_code: u8 = loop {
-        draw_prompt!("PS1");
-
         if should_clear_buffer {
+            draw_prompt!("PS1");
             buffer.clear();
+        } else {
+            draw_prompt!("PS2");
         }
         match reader.read_input(&mut buffer) {
             Ok(Some(())) => {},

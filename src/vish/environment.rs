@@ -11,6 +11,7 @@ impl ShellEnvironment {
     pub fn new() -> Self {
         let mut shell_variables = HashMap::new();
         Self::init_par(&mut shell_variables, "PS1", "$ ");
+        Self::init_par(&mut shell_variables, "PS2", "> ");
 
         Self { shell_variables }
     }
