@@ -10,10 +10,10 @@ fn cleanup_input(reader: &mut InputReader) -> io::Result<()> {
     reader.disable_raw_mode()
 }
 
-fn draw_prompt(stdout: &mut io::Stdout, env: &Env) -> io::Result<()> {
+fn draw_prompt(stdout: &mut io::Stdout, env: &Env, key: &str) -> io::Result<()> {
     let unset_value = String::new();
-    let ps1 = env.shell_variables.get("PS1").unwrap_or(&unset_value);
-    stdout.write_all(ps1.as_bytes())?;
+    let prompt = env.shell_variables.get(key).unwrap_or(&unset_value);
+    stdout.write_all(prompt.as_bytes())?;
     stdout.flush()
 }
 
@@ -22,23 +22,32 @@ fn draw_newline(stdout: &mut io::Stdout) -> io::Result<()> {
     stdout.flush()
 }
 
-macro_rules! draw_newline {
-    ($stdout:expr) => {
-        if draw_newline(&mut $stdout).is_err() { return 1.into(); }
-    };
-}
-
 pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
+    let mut stdout = io::stdout();
+
+    macro_rules! draw_prompt {
+        ($key:expr) => {
+            if draw_prompt(&mut stdout, &env, $key).is_err() {
+                return 1.into();
+            }
+        };
+    }
+
+    macro_rules! draw_newline {
+        () => {
+            if draw_newline(&mut stdout).is_err() { return 1.into(); }
+        };
+    }
+
     if reader.enable_raw_mode().is_err() {
         return handle_fallback_mode();
     }
 
     let mut buffer = Buffer::new();
-    let mut stdout = io::stdout();
     let mut last_cmd_code: u8 = 0;
     let mut should_clear_buffer = true;
     let exit_code: u8 = loop {
-        if draw_prompt(&mut stdout, &env).is_err() { return 1.into(); }
+        draw_prompt!("PS1");
 
         if should_clear_buffer {
             buffer.clear();
@@ -47,7 +56,7 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
             Ok(Some(())) => {},
             Ok(None) => {
                 if should_clear_buffer {
-                    draw_newline!(stdout);
+                    draw_newline!();
                     break last_cmd_code;
                 } else {
                     eprintln!("vish: Syntax error: Unterminated quoted string");
@@ -67,7 +76,7 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
         };
 
         if argv.is_empty() {
-            draw_newline!(stdout);
+            draw_newline!();
             continue;
         }
 
@@ -77,7 +86,7 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
                     Ok(_) => {},
                     Err(_) => { return 1.into(); }
                 };
-                draw_newline!(stdout);
+                draw_newline!();
                 should_clear_buffer = false;
                 continue;
             },
@@ -85,7 +94,7 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
             None => { should_clear_buffer = true; }
         }
 
-        draw_newline!(stdout);
+        draw_newline!();
 
         last_cmd_code = match argv[0].as_str() {
             "cd" => cmd::cd(argv),
