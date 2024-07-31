@@ -45,7 +45,16 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
         }
         match reader.read_input(&mut buffer) {
             Ok(Some(())) => {},
-            Ok(None) => { draw_newline!(stdout); break last_cmd_code; },
+            Ok(None) => {
+                if should_clear_buffer {
+                    draw_newline!(stdout);
+                    break last_cmd_code;
+                } else {
+                    eprintln!("vish: Syntax error: Unterminated quoted string");
+                    should_clear_buffer = true;
+                    continue;
+                }
+            },
             Err(e) => { eprintln!("{}", e); return 1.into(); },
         }
 
