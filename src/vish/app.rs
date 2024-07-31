@@ -57,6 +57,11 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
             }
         };
 
+        if argv.is_empty() {
+            draw_newline!(stdout);
+            continue;
+        }
+
         match quote_char {
             Some('\'') => {
                 match buffer.write(b"\n") {
