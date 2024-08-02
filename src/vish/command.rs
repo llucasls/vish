@@ -201,7 +201,7 @@ pub fn exec(argv: ArgV, reader: &mut InputReader) -> u8 {
     }
 }
 
-fn replace_escape_sequence(input: &Vec<u8>) -> Vec<u8> {
+fn replace_escape_sequence(input: &[u8]) -> Vec<u8> {
     let hex_seq = br"\x1b";
     let oct_seq = br"\033";
     let char_seq = br"\e";
