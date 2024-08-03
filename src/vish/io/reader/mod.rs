@@ -4,7 +4,7 @@ use termios::*;
 use termios::os::target::{VWERASE, VREPRINT};
 
 use super::display::*;
-use super::super::buffer::Buffer;
+use crate::vish::buffer::Buffer;
 
 const NEWLINE: u8 = b'\n';
 

@@ -1,10 +1,10 @@
 #[cfg(not(test))]
-use super::super::passwd::get_home;
+use crate::vish::passwd::get_home;
 
 #[cfg(not(test))]
 use std::env::var as get_var;
 
-use super::super::command::ArgV;
+use crate::vish::command::ArgV;
 
 pub fn replace_tilde(user_input: String) -> String {
     let tilde_index = user_input.find('~');
