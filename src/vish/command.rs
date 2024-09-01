@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use super::buffer::Buffer;
 use super::io::InputReader;
+use crate::vish::io::string::expand_parameter;
 
 pub type ArgV = Vec<String>;
 pub enum ShellCommand {
@@ -157,9 +158,9 @@ pub fn echo(argv: ArgV) -> u8 {
     let size = argv.len();
     if size > 1 {
         for arg in &argv[1..(size - 1)] {
-            print!("{} ", arg);
+            print!("{} ", expand_parameter(arg.to_string()));
         }
-        print!("{}", argv[size - 1]);
+        print!("{}", expand_parameter(argv[size - 1].to_string()));
     }
     println!();
     0

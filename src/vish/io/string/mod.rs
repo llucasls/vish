@@ -6,6 +6,12 @@ use std::env::var as get_var;
 
 use crate::vish::command::ArgV;
 
+mod expand_parameter;
+pub use expand_parameter::expand_parameter;
+
+mod substitute_command;
+pub use substitute_command::substitute_command;
+
 pub fn replace_tilde(user_input: String) -> String {
     let tilde_index = user_input.find('~');
     let bar_index = user_input.find('/');
