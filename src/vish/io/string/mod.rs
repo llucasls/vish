@@ -12,6 +12,9 @@ pub use expand_parameter::expand_parameter;
 mod substitute_command;
 pub use substitute_command::substitute_command;
 
+mod field;
+pub use field::Field;
+
 pub fn replace_tilde(user_input: String) -> String {
     let tilde_index = user_input.find('~');
     let bar_index = user_input.find('/');
@@ -87,6 +90,67 @@ pub fn parse_argv(text: &str) -> (ArgV, Option<char>) {
         (argv, Some(quote_char))
     } else {
         (argv, None)
+    }
+}
+
+pub fn split_argv(text: &str) -> (Vec<String>, Option<char>) {
+    let mut argv: Vec<String> = Vec::new();
+    let mut in_quotes = false;
+    let mut current_arg = String::new();
+    let mut quote_char = '\0';
+
+    for c in text.chars() {
+        match c {
+            '\'' | '"' if !in_quotes => {
+                in_quotes = true;
+                quote_char = c;
+            },
+            '\'' | '"' if in_quotes && c == quote_char => {
+                in_quotes = false;
+                argv.push(Field::Plain(current_arg.clone()).substitute());
+                current_arg.clear();
+            },
+            ' ' | '\t' if !in_quotes && !current_arg.is_empty() => {
+                argv.push(Field::Plain(current_arg.clone()).substitute());
+                current_arg.clear();
+            },
+            ' ' | '\t' if !in_quotes && current_arg.is_empty() => {},
+            _ => {
+                current_arg.push(c);
+            }
+        }
+    }
+
+    if !current_arg.is_empty() {
+        argv.push(Field::Plain(current_arg).substitute());
+    }
+
+    if in_quotes {
+        (argv, Some(quote_char))
+    } else {
+        (argv, None)
+    }
+}
+
+#[cfg(test)]
+mod split_argv {
+    use super::{split_argv, Field};
+
+    #[test]
+    fn return_single_plain_field() {
+        let input = "antedeguemon";
+        let (output, _) = split_argv(input);
+        assert_eq!(output, vec![Field::Plain("antedeguemon".to_string()).substitute()]);
+    }
+
+    #[test]
+    fn return_parameter_field() {
+        let input = "echo ${USER}";
+        let (output, _) = split_argv(input);
+        assert_eq!(output, vec![
+            Field::Plain("echo".to_string()).substitute(),
+            Field::Parameter("USER".to_string()).substitute()
+        ]);
     }
 }
 
