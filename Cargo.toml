@@ -2,8 +2,10 @@
 name = "vish"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "ISC"
+description = "A featureful POSIX-compliant shell that will leave you impressed."
+readme = "README.md"
+repository = "https://github.com/llucasls/vish"
 
 [dependencies]
 libc = "0.2.155"
