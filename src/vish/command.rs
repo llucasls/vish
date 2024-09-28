@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use super::buffer::Buffer;
 use super::io::InputReader;
-use crate::vish::io::string::expand_parameter;
+
 
 pub type ArgV = Vec<String>;
 pub enum ShellCommand {
