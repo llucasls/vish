@@ -158,9 +158,9 @@ pub fn echo(argv: ArgV) -> u8 {
     let size = argv.len();
     if size > 1 {
         for arg in &argv[1..(size - 1)] {
-            print!("{} ", expand_parameter(arg.to_string()));
+            print!("{} ", arg.to_string());
         }
-        print!("{}", expand_parameter(argv[size - 1].to_string()));
+        print!("{}", argv[size - 1].to_string());
     }
     println!();
     0
