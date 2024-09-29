@@ -1,10 +1,11 @@
 use std::process::ExitCode;
 use std::io::{self, Write};
 
-use super::io::{InputReader, parse_argv};
+use super::io::InputReader;
 use super::buffer::Buffer;
 use super::command as cmd;
 use super::environment::ShellEnvironment as Env;
+use super::string::parse_argv;
 
 fn cleanup_input(reader: &mut InputReader) -> io::Result<()> {
     reader.disable_raw_mode()
