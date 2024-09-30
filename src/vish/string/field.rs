@@ -26,18 +26,18 @@ fn is_number(num: &str) -> bool {
 }
 
 fn in_braces(text: &str) -> bool {
-    text.starts_with("${") && text.ends_with("}")
+    text.starts_with("${") && text.ends_with('}')
 }
 
 fn in_parenthesis(text: &str) -> bool {
-    text.starts_with("$(") && text.ends_with(")")
+    text.starts_with("$(") && text.ends_with(')')
 }
 
 fn in_single_parenthesis(text: &str) -> bool {
     if in_double_parenthesis(text) {
         return false;
     }
-    text.starts_with("$(") && text.ends_with(")")
+    text.starts_with("$(") && text.ends_with(')')
 }
 
 fn in_double_parenthesis(text: &str) -> bool {
@@ -45,15 +45,15 @@ fn in_double_parenthesis(text: &str) -> bool {
 }
 
 fn in_single_quotes(text: &str) -> bool {
-    text.starts_with("$'") && text.ends_with("'") && text.len() > 2
+    text.starts_with("$'") && text.ends_with('\'') && text.len() > 2
 }
 
 fn in_backticks(text: &str) -> bool {
-    text.starts_with("`") && text.ends_with("`") && text.len() > 1
+    text.starts_with('`') && text.ends_with('`') && text.len() > 1
 }
 
 fn is_unenclosed_parameter(text: &str) -> bool {
-    text.starts_with("$") &&
+    text.starts_with('$') &&
         ! in_braces(text) &&
         ! in_parenthesis(text) &&
         ! in_single_quotes(text) &&
@@ -62,7 +62,7 @@ fn is_unenclosed_parameter(text: &str) -> bool {
 
 fn is_special_parameter(text: &str) -> bool {
     let special_chars = ['@', '*', '#', '?', '-', '$', '!', '0'];
-    text.len() > 1 && text.starts_with("$") &&
+    text.len() > 1 && text.starts_with('$') &&
         special_chars.contains(&text.chars().nth(1).unwrap_or('_'))
 }
 
@@ -94,7 +94,7 @@ impl Field<String> {
     pub fn new(text: String) -> Field<String> {
         let size: usize = text.len();
 
-        if ! text.starts_with("$") {
+        if ! text.starts_with('$') {
             Field::Plain(text)
         } else if is_special_parameter(&text) {
             let name = text.chars().nth(1);
@@ -144,7 +144,7 @@ impl Field<String> {
 
     fn substitute_parameter(self) -> String {
         if let Field::Parameter(text) = self {
-            match get_var(&text) {
+            match get_var(text.as_str()) {
                 Ok(value) => value,
                 Err(_) => String::with_capacity(0),
             }
