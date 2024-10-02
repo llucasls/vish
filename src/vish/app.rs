@@ -82,7 +82,7 @@ pub fn handle_interactive_mode(reader: &mut InputReader, env: Env) -> ExitCode {
             continue;
         }
 
-       match quote_char {
+        match quote_char {
             Some('\'') | Some('"') => {
                 match buffer.write(b"\n") {
                     Ok(_) => {},
