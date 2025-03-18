@@ -3,53 +3,154 @@ use std::io::{self, Read, Write, Stdin, Stdout};
 use termios::*;
 use termios::os::target::{VWERASE, VREPRINT};
 
-use super::display::*;
 use crate::vish::buffer::Buffer;
+use crate::{kill_line, move_cursor, reprint_line};
 
 const NEWLINE: u8 = b'\n';
 
-const UP: Option<Directional> = Some(Directional::Up);
-const DOWN: Option<Directional> = Some(Directional::Down);
-const LEFT: Option<Directional> = Some(Directional::Left);
-const RIGHT: Option<Directional> = Some(Directional::Right);
-
-#[derive(Eq, PartialEq)]
-enum Directional {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-fn moved(input: Vec<u8>) -> Option<Directional> {
-    match input.as_slice() {
-        b"\x1b[A" => UP,
-        b"\x1b[B" => DOWN,
-        b"\x1b[C" => RIGHT,
-        b"\x1b[D" => LEFT,
-        _ => None,
-    }
-}
+const UP: u8 = b'A';
+const DOWN: u8 = b'B';
+const LEFT: u8 = b'D';
+const RIGHT: u8 = b'C';
 
 fn handle_werase_byte(bytes: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
     if bytes.is_empty() {
         return bytes;
     }
 
-    let is_whitespace = |b: Vec<u8>| b.iter().all(|b| b.is_ascii_whitespace());
+    let is_whitespace = |c: Vec<u8>| c.iter().all(|b| b.is_ascii_whitespace());
     let mut new_bytes = bytes.clone();
 
-    for byte_array in bytes.iter().rev() {
-        if !is_whitespace(byte_array.to_vec()) { break; }
+    for utf8_char in bytes.iter().rev() {
+        if !is_whitespace(utf8_char.to_vec()) { break; }
         new_bytes.pop();
     }
 
-    for byte_array in new_bytes.clone().iter().rev() {
-        if is_whitespace(byte_array.to_vec()) { break; }
+    for utf8_char in new_bytes.clone().iter().rev() {
+        if is_whitespace(utf8_char.to_vec()) { break; }
         new_bytes.pop();
     }
 
     new_bytes
+}
+
+macro_rules! delete_previous_char {
+    ($index:expr, $vector:expr, $stdout:expr) => {{
+        $index -= 1;
+        $vector.remove($index);
+        $stdout.write_all(b"\x08 \x08")?;
+        $stdout.flush()?;
+        continue;
+    }}
+}
+
+macro_rules! delete_previous_word {
+    ($index:expr, $vector:expr, $stdout:expr) => {{
+        let previous_length = $vector.len();
+        $vector = handle_werase_byte($vector);
+        let resulting_length = $vector.len();
+        let diff = previous_length - resulting_length;
+        $index -= diff;
+        let mut stdout = io::stdout();
+        move_cursor!(-(diff as isize), $stdout);
+        reprint_line!(stdout, $vector);
+        $stdout.flush()?;
+        continue;
+    }}
+}
+
+macro_rules! erase_line {
+    ($index:expr, $outer_vector:expr, $inner_vector:expr, $stdout:expr) => {{
+        kill_line!($stdout);
+        $stdout.flush()?;
+        $outer_vector.clear();
+        $inner_vector.clear();
+        $index = 0;
+        continue;
+    }}
+}
+
+macro_rules! delete_char {
+    ($index:expr, $vector:expr, $stdout:expr) => {{
+        if $index < $vector.len() {
+            $vector.remove($index);
+            reprint_line!($stdout, &$vector);
+            $stdout.flush()?;
+        }
+        continue;
+    }}
+}
+
+macro_rules! go_to_start {
+    ($index:expr, $stdout:expr) => {{
+        //move_cursor(-($index as isize))?;
+        move_cursor!(-($index as isize), $stdout);
+        $stdout.flush()?;
+        $index = 0;
+        continue;
+    }}
+}
+
+macro_rules! go_to_end {
+    ($index:expr, $vector:expr, $stdout:expr) => {{
+        //move_cursor(($vector.len() - $index) as isize)?;
+        move_cursor!(($vector.len() - $index), $stdout);
+        $stdout.flush()?;
+        $index = $vector.len();
+        continue;
+    }}
+}
+
+macro_rules! store_byte {
+    ($byte:expr, $vector:expr) => {{
+        $vector.push($byte);
+        continue;
+    }}
+}
+
+macro_rules! move_left {
+    ($index:expr, $inner_vector:expr, $stdout:expr) => {{
+        $inner_vector.clear();
+        if $index > 0 {
+            //move_cursor(-1)?;
+            move_cursor!(-1, $stdout);
+            $stdout.flush()?;
+            $index -= 1;
+        }
+        continue;
+    }}
+}
+
+macro_rules! move_right {
+    ($index:expr, $inner_vector:expr, $outer_vector:expr, $stdout:expr) => {{
+        $inner_vector.clear();
+        if $index < $outer_vector.len() {
+            //move_cursor(1)?;
+            move_cursor!(1, $stdout);
+            $stdout.flush()?;
+            $index += 1;
+        }
+        continue;
+    }}
+}
+
+macro_rules! store_character {
+    ($b:expr, $i:expr, $inner_vec:expr, $outer_vec:expr, $stdout:expr) => {{
+        $inner_vec.push($b);
+        if $i < $outer_vec.len() {
+            $outer_vec.insert($i, $inner_vec.clone());
+            reprint_line!($stdout, &$outer_vec);
+            //move_cursor(1)?;
+            move_cursor!(1, $stdout);
+            $stdout.flush()?;
+        } else {
+            $outer_vec.push($inner_vec.clone());
+            $stdout.write_all($inner_vec.as_slice())?;
+            $stdout.flush()?;
+        }
+        $i += 1;
+        $inner_vec.clear();
+    }}
 }
 
 pub struct InputReader {
@@ -90,84 +191,62 @@ impl InputReader {
         let kill_char = self.termios.c_cc[VKILL];
         let reprint_char = self.termios.c_cc[VREPRINT];
 
-        let mut outer_vector: Vec<Vec<u8>> = Vec::new();
-        let mut inner_vector: Vec<u8> = Vec::new();
+        let mut outer_vector: Vec<Vec<u8>> = Vec::with_capacity(256);
+        let mut inner_vector: Vec<u8> = Vec::with_capacity(4);
+        let mut index: usize = 0;
 
         for byte_result in self.stdin.lock().bytes() {
             let byte = byte_result?;
 
-            if byte == erase_char {
-                outer_vector.pop();
-                delete_previous_char()?;
-                continue;
-            }
-
-            if byte == werase_char {
-                outer_vector = handle_werase_byte(outer_vector);
-                reprint_line(&outer_vector)?;
-                continue;
-            }
-
-            if byte == kill_char {
-                kill_line()?;
-                outer_vector.clear();
-                inner_vector.clear();
-                continue;
-            }
-
-            if byte == reprint_char {
-                reprint_line(&outer_vector)?;
-                continue;
-            }
-
-            if byte == 27 {
-                inner_vector.push(byte);
-                continue;
-            }
-
-            if byte == 91 && !inner_vector.is_empty() && inner_vector[0] == 27 {
-                inner_vector.push(byte);
-                continue;
-            }
-
-            if !inner_vector.is_empty() {
-                match moved(vec![27, 91, byte]) {
-                    UP => {
-                        inner_vector.clear();
-                        continue;
-                    },
-                    DOWN => {
-                        inner_vector.clear();
-                        continue;
-                    },
-                    LEFT => {
-                        inner_vector.clear();
-                        move_left()?;
-                        continue;
-                    },
-                    RIGHT => {
-                        inner_vector.clear();
-                        move_right()?;
-                        continue;
-                    },
-                    _ => {},
-                }
-            }
-
-            if byte == eof_char {
-                return Ok(None);
-            }
-
-            if byte == NEWLINE {
-                break;
-            }
-
-            inner_vector.push(byte);
-            if std::str::from_utf8(inner_vector.as_slice()).is_ok() {
-                outer_vector.push(inner_vector.clone());
-                self.stdout.write_all(inner_vector.as_slice())?;
-                self.stdout.flush()?;
-                inner_vector.clear();
+            match byte {
+                b if b == erase_char && index == 0 => { continue; },
+                b if b == erase_char => delete_previous_char!(
+                    index, outer_vector, self.stdout
+                ),
+                b if b == werase_char => delete_previous_word!(
+                    index, outer_vector, self.stdout
+                ),
+                b if b == kill_char => erase_line!(
+                    index, outer_vector, inner_vector, self.stdout
+                ),
+                b if b == reprint_char => reprint_line!(
+                    self.stdout, outer_vector
+                ),
+                b if b == eof_char && outer_vector.is_empty() => {
+                    return Ok(None);
+                },
+                b if b == eof_char => delete_char!(
+                    index, outer_vector, self.stdout
+                ),
+                0x01 => go_to_start!(index, self.stdout),
+                0x05 => go_to_end!(index, outer_vector, self.stdout),
+                0x1b => store_byte!(byte, inner_vector),
+                b'[' if inner_vector.as_slice() == b"\x1b" => store_byte!(
+                    byte, inner_vector
+                ),
+                UP if matches!(inner_vector.as_slice(), b"\x1b[") => {
+                    inner_vector.clear();
+                    continue;
+                },
+                DOWN if matches!(inner_vector.as_slice(), b"\x1b[") => {
+                    inner_vector.clear();
+                    continue;
+                },
+                RIGHT if matches!(inner_vector.as_slice(), b"\x1b[") => {
+                    move_right!(index, inner_vector, outer_vector, self.stdout);
+                },
+                LEFT if matches!(inner_vector.as_slice(), b"\x1b[") => {
+                    move_left!(index, inner_vector, self.stdout);
+                },
+                NEWLINE => { break; },
+                b if b < 0x20 => { continue; },
+                _ if std::str::from_utf8(inner_vector.as_slice()).is_err() => {
+                    inner_vector.push(byte);
+                    continue;
+                },
+                _ => store_character!(
+                    byte, index, inner_vector, outer_vector, self.stdout
+                ),
             }
         }
 

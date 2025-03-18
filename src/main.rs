@@ -1,7 +1,8 @@
 pub mod vish;
+pub mod macros;
 use std::process::ExitCode;
 
-use self::vish::io::InputReader;
+use crate::vish::io::InputReader;
 use self::vish::environment::ShellEnvironment;
 
 fn main() -> ExitCode {
