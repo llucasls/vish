@@ -1,14 +1,29 @@
 #[cfg(not(test))]
 use std::env::var as get_var;
 
+/// Represents different types of shell fields, which may undergo various forms of expansion.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Field<T> {
+    /// A plain word that is not subject to any expansion.
     Plain(T),
+
+    /// A parameter substitution, typically in the form of `$VAR` or `${VAR}`.
     Parameter(T),
+
+    /// A command substitution using `$(...)` or `` `...` ``.
     Command(T),
+
+    /// An arithmetic expansion using `$((...))`, which evaluates expressions.
     Arithmetic(T),
+
+    /// A field enclosed in double quotes (`"..."`).
+    /// May still allow certain expansions within.
     Quoted(T),
+
+    /// A positional parameter, such as `$1`, `$2`, etc.
     Position(T),
+
+    /// A special parameter, such as `$@`, `$*`, `$#`, `$?`, `$-`, `$$`, `$!`, or `$0`.
     Special(T),
 }
 
