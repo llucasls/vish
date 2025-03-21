@@ -56,14 +56,6 @@ impl Shell {
             }}
         }
 
-        macro_rules! draw_newline {
-            ($stdout:expr) => {{
-                if $stdout.write_all(b"\n").is_err() {
-                    return ShellStatus::fail("failed to write to stdout");
-                }
-            }}
-        }
-
         macro_rules! flush {
             ($stdout:expr) => {{
                 if $stdout.flush().is_err() {
@@ -86,13 +78,14 @@ impl Shell {
                 buffer.clear();
             } else {
                 draw_prompt!("PS2", stdout);
+                flush!(stdout);
             }
 
             match reader.read_input(&mut buffer) {
                 Ok(Some(())) => {},
                 Ok(None) => {
                     if should_clear_buffer {
-                        draw_newline!(stdout);
+                        println!();
                         break last_cmd_code;
                     } else {
                         eprintln!(
@@ -111,8 +104,7 @@ impl Shell {
             };
 
             if argv.is_empty() {
-                draw_newline!(stdout);
-                flush!(stdout);
+                println!();
                 continue;
             }
 
@@ -122,8 +114,7 @@ impl Shell {
                         Ok(_) => {},
                         Err(e) => { return Err(e).into(); }
                     };
-                    draw_newline!(stdout);
-                    flush!(stdout);
+                    println!();
                     should_clear_buffer = false;
                     continue;
                 },
@@ -135,8 +126,7 @@ impl Shell {
                 None => { should_clear_buffer = true; }
             }
 
-            draw_newline!(stdout);
-            flush!(stdout);
+            println!();
 
             last_cmd_code = match argv[0].as_str() {
                 "cd" => cmd::cd(argv),
