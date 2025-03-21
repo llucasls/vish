@@ -4,3 +4,4 @@ pub mod command;
 pub mod environment;
 pub mod passwd;
 pub mod string;
+pub mod token;
