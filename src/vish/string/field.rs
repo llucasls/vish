@@ -1,7 +1,7 @@
 #[cfg(not(test))]
 use std::env::var as get_var;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Field<T> {
     Plain(T),
     Parameter(T),
@@ -87,7 +87,7 @@ fn get_parameter_name(text: String) -> (String, String) {
         return (name, remaining_chars);
     }
 
-    (String::with_capacity(0), text)
+    (String::new(), text)
 }
 
 impl Field<String> {
@@ -146,10 +146,10 @@ impl Field<String> {
         if let Field::Parameter(text) = self {
             match get_var(text.as_str()) {
                 Ok(value) => value,
-                Err(_) => String::with_capacity(0),
+                Err(_) => String::new(),
             }
         } else {
-            String::with_capacity(0)
+            String::new()
         }
     }
 }
@@ -161,7 +161,8 @@ use std::env::VarError;
 fn get_var(name: &str) -> Result<String, VarError> {
     match name {
         "HOME" => Ok("/home/gustav".to_string()),
-        _ => Err(VarError::NotPresent)
+        "USER" => Ok("gustav".to_string()),
+        _ => Err(VarError::NotPresent),
     }
 }
 
