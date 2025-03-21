@@ -1,49 +1,35 @@
-use std::io::{self, Read, Write, Seek, SeekFrom, Cursor};
 use std::fmt;
+use std::io::{self, Read, Write, Seek, SeekFrom, Cursor};
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 
-pub type Byte = u8;
-pub type ByteArray = [u8];
-
+/// A buffer for handling dynamically allocated bytes,
+/// with utilities for safely converting to UTF-8.
 pub struct Buffer {
-    cursor: Cursor<Vec<Byte>>,
+    cursor: Cursor<Vec<u8>>,
 }
 
 impl Buffer {
-    // Create new buffer
+    /// Create new buffer
     pub fn new() -> Self {
-        Buffer {
-            cursor: Cursor::new(Vec::new()),
-        }
+        let cursor = Cursor::new(Vec::new());
+        Self { cursor }
     }
 
-    // Create buffer from byte vector
+    /// Create buffer from byte vector
     pub fn from(data: Vec<u8>) -> Self {
-        Buffer {
-            cursor: Cursor::new(data),
-        }
+        let cursor = Cursor::new(data);
+        Self { cursor }
     }
 
-    // Create buffer from string slice
+    /// Create buffer from string slice
     pub fn from_utf8(text: &str) -> Self {
-        Buffer {
-            cursor: Cursor::new(text.into()),
-        }
+        let cursor: Cursor<Vec<u8>> = Cursor::new(text.into());
+        Self { cursor }
     }
 
-    // Return the number of bytes stored in the buffer
-    pub fn len(&self) -> usize {
-        self.cursor.get_ref().len()
-    }
-
-    // Return true if vector is empty
-    pub fn is_empty(&self) -> bool {
-        self.cursor.get_ref().is_empty()
-    }
-
-    // Return the byte at the current position
-    pub fn byte(&self) -> Option<Byte> {
+    /// Return the byte at the current position
+    pub fn byte(&self) -> Option<u8> {
         let pos = self.position() as usize;
         if pos < self.len() {
             Some(self.get_ref()[pos])
@@ -52,38 +38,24 @@ impl Buffer {
         }
     }
 
-    // Return true if the inner vector is valid utf8 and false otherwise
-    pub fn is_valid_utf8(&self) -> bool {
-        std::str::from_utf8(self.get_ref()).is_ok()
+    /// Remove all values
+    pub fn clear(&mut self) {
+        self.get_mut().clear();
+        self.set_position(0);
     }
 
-    // Return the current position
-    pub fn position(&self) -> u64 {
-        self.cursor.position()
+    /// Return mutable reference to inner vector
+    pub fn get_mut(&mut self) -> &mut Vec<u8> {
+        self.cursor.get_mut()
     }
 
-    // Set the position to a given number
-    pub fn set_position(&mut self, pos: u64) {
-        self.cursor.set_position(pos);
+    /// Return reference to inner vector
+    pub fn get_ref(&self) -> &Vec<u8> {
+        self.cursor.get_ref()
     }
 
-    // Update the cursor position
-    pub fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        self.cursor.seek(pos)
-    }
-
-    // Write bytes from byte array into buffer
-    pub fn write(&mut self, buf: &ByteArray) -> io::Result<usize> {
-        self.cursor.write(buf)
-    }
-
-    // Read bytes from buffer and place them into byte array
-    pub fn read(&mut self, buf: &mut ByteArray) -> io::Result<usize> {
-        self.cursor.read(buf)
-    }
-
-    // Insert bytes into buffer at current position
-    pub fn insert(&mut self, data: &ByteArray) {
+    /// Insert bytes into buffer at current position
+    pub fn insert(&mut self, data: &[u8]) {
         let pos = self.cursor.position() as usize;
         let inner_vec = self.cursor.get_mut();
 
@@ -91,7 +63,42 @@ impl Buffer {
         self.cursor.set_position((pos + data.len()) as u64);
     }
 
-    // Update the cursor position while respecting boundaries
+    /// Consume buffer and return inner vector
+    pub fn into_inner(self) -> Vec<u8> {
+        self.cursor.into_inner()
+    }
+
+    /// Return true if vector is empty
+    pub fn is_empty(&self) -> bool {
+        self.cursor.get_ref().is_empty()
+    }
+
+    /// Return true if the inner vector is valid utf8 and false otherwise
+    pub fn is_valid_utf8(&self) -> bool {
+        std::str::from_utf8(self.get_ref()).is_ok()
+    }
+
+    /// Iterate over inner vector
+    pub fn iter(&self) -> std::slice::Iter<'_, u8> {
+        self.get_ref().iter()
+    }
+
+    /// Return the number of bytes stored in the buffer
+    pub fn len(&self) -> usize {
+        self.cursor.get_ref().len()
+    }
+
+    /// Return the current position
+    pub fn position(&self) -> u64 {
+        self.cursor.position()
+    }
+
+    /// Read bytes from buffer and place them into byte array
+    pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.cursor.read(buf)
+    }
+
+    /// Update the cursor position while respecting boundaries
     pub fn safe_seek(&mut self, pos: SeekFrom) -> u64 {
         let current_pos = self.cursor.position();
         let new_pos = match pos {
@@ -111,40 +118,29 @@ impl Buffer {
         bounded_pos
     }
 
-    // Return reference to inner vector
-    pub fn get_ref(&self) -> &Vec<Byte> {
-        self.cursor.get_ref()
+    /// Update the cursor position
+    pub fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.cursor.seek(pos)
     }
 
-    // Return mutable reference to inner vector
-    pub fn get_mut(&mut self) -> &mut Vec<Byte> {
-        self.cursor.get_mut()
+    /// Set the position to a given number
+    pub fn set_position(&mut self, pos: u64) {
+        self.cursor.set_position(pos);
     }
 
-    // Return byte vector content as string
+    /// Write bytes from byte array into buffer
+    pub fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.cursor.write(buf)
+    }
+
+    /// Return byte vector content as string
     pub fn as_string(&self) -> Result<String, FromUtf8Error> {
         String::from_utf8(self.get_ref().to_vec())
     }
 
-    // Return byte vector content as string slice
+    /// Return byte vector content as string slice
     pub fn as_str(&self) -> Result<&str, Utf8Error> {
         std::str::from_utf8(self.get_ref())
-    }
-
-    // Iterate over inner vector
-    pub fn iter(&self) -> std::slice::Iter<'_, Byte> {
-        self.get_ref().iter()
-    }
-
-    // Remove all values
-    pub fn clear(&mut self) {
-        self.get_mut().clear();
-        self.set_position(0);
-    }
-
-    // Consume buffer and return inner vector
-    pub fn into_inner(self) -> Vec<Byte> {
-        self.cursor.into_inner()
     }
 }
 
