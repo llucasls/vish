@@ -20,6 +20,9 @@ pub enum Field<T> {
     /// May still allow certain expansions within.
     Quoted(T),
 
+    /// A string enclosed in `$'...'`, which supports escape sequences.
+    CStyleQuoted(T),
+
     /// A positional parameter, such as `$1`, `$2`, etc.
     Position(T),
 
@@ -152,6 +155,7 @@ impl Field<String> {
             Field::Command(text) => format!("command: {}", text),
             Field::Arithmetic(text) => format!("arithmetic: {}", text),
             Field::Quoted(text) => format!("quoted: {}", text),
+            Field::CStyleQuoted(text) => format!("quoted: {}", text),
             Field::Position(text) => format!("positional parameter: {}", text),
             Field::Special(text) => format!("special parameter: {}", text),
         }
