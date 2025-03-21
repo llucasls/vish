@@ -148,6 +148,19 @@ impl Field<String> {
         }
     }
 
+    pub fn into_inner(self) -> String {
+        match self {
+            Field::Plain(text) => text,
+            Field::Parameter(name) => name,
+            Field::Command(command) => command,
+            Field::Arithmetic(operation) => operation,
+            Field::Quoted(text) => text,
+            Field::CStyleQuoted(text) => text,
+            Field::Position(number) => number,
+            Field::Special(character) => character,
+        }
+    }
+
     pub fn substitute(self) -> String {
         match &self {
             Field::Plain(text) => text.to_string(),
@@ -162,11 +175,7 @@ impl Field<String> {
     }
 
     fn substitute_parameter(self) -> String {
-        if let Field::Parameter(text) = self {
-            get_var(text.as_str()).unwrap_or_default()
-        } else {
-            String::new()
-        }
+        get_var(self.into_inner().as_str()).unwrap_or_default()
     }
 }
 
