@@ -186,26 +186,6 @@ impl Display for ShellStatus {
     }
 }
 
-/*
-impl Fail<String> for ShellStatus {
-    fn fail(msg: String) -> Self {
-        Self { msg, code: 1 }
-    }
-}
-
-impl Fail<&str> for ShellStatus {
-    fn fail(msg: &str) -> Self {
-        Self { msg: msg.into(), code: 1 }
-    }
-}
-
-impl Fail<&String> for ShellStatus {
-    fn fail(msg: &String) -> Self {
-        Self { msg: msg.into(), code: 1 }
-    }
-}
-*/
-
 impl<T: ToString> Fail<T> for ShellStatus {
     fn fail(msg: T) -> Self {
         Self { msg: msg.to_string(), code: 1 }
