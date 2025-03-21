@@ -144,10 +144,7 @@ impl Field<String> {
 
     fn substitute_parameter(self) -> String {
         if let Field::Parameter(text) = self {
-            match get_var(text.as_str()) {
-                Ok(value) => value,
-                Err(_) => String::new(),
-            }
+            get_var(text.as_str()).unwrap_or_default()
         } else {
             String::new()
         }
