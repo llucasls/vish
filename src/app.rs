@@ -110,10 +110,9 @@ impl Shell {
 
             match quote_char {
                 Some('\'') | Some('"') => {
-                    match buffer.write(b"\n") {
-                        Ok(_) => {},
-                        Err(e) => { return Err(e).into(); }
-                    };
+                    if let Err(e) = buffer.write(b"\n") {
+                        return Err(e).into();
+                    }
                     println!();
                     should_clear_buffer = false;
                     continue;
