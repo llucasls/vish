@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 type ShVar = HashMap<String, String>;
 
+#[derive(Debug, PartialEq)]
 pub struct ShellEnvironment {
     pub shell_variables: ShVar,
 }

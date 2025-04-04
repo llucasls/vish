@@ -1,8 +1,13 @@
 #[cfg(not(test))]
 use std::env::var as get_var;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::app::Shell;
+
 /// Represents different types of shell fields, which may undergo various forms of expansion.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub enum Field<T> {
     /// A plain word that is not subject to any expansion.
     Plain(T),
@@ -27,7 +32,7 @@ pub enum Field<T> {
     Position(T),
 
     /// A special parameter, such as `$@`, `$*`, `$#`, `$?`, `$-`, `$$`, `$!`, or `$0`.
-    Special(T),
+    Special { shell: Rc<RefCell<Shell>>, name: char },
 }
 
 fn is_valid_parameter(par: &str) -> bool {
@@ -109,19 +114,17 @@ fn get_parameter_name(text: String) -> (String, String) {
 }
 
 impl Field<String> {
-    pub fn new(text: String) -> Self {
+    pub fn new(shell: Rc<RefCell<Shell>>, text: String) -> Self {
         let size: usize = text.len();
 
         if ! text.starts_with('$') {
             Self::Plain(text)
         } else if is_special_parameter(&text) {
-            let name = text.chars().nth(1);
-            if name.is_none() {
-                return Self::Plain(String::new());
-            }
-            let mut par = String::new();
-            par.push(name.unwrap());
-            Self::Special(par)
+            let name: char = match text.chars().nth(1) {
+                Some(character) => character,
+                None => { return Self::Plain(String::new()); },
+            };
+            Self::Special { shell, name }
         } else if is_unenclosed_parameter(&text) {
             let (par, _rest) = get_parameter_name(String::from(&text[1..]));
             Self::Parameter(par)
@@ -157,7 +160,7 @@ impl Field<String> {
             Self::Quoted(text) => text,
             Self::CStyleQuoted(text) => text,
             Self::Position(number) => number,
-            Self::Special(character) => character,
+            Self::Special { name, .. } => name.to_string(),
         }
     }
 
@@ -170,12 +173,27 @@ impl Field<String> {
             Self::Quoted(text) => format!("quoted: {}", text),
             Self::CStyleQuoted(text) => format!("quoted: {}", text),
             Self::Position(text) => format!("positional parameter: {}", text),
-            Self::Special(text) => format!("special parameter: {}", text),
+            Self::Special { .. } => self.substitute_special(),
         }
     }
 
     fn substitute_parameter(self) -> String {
         get_var(self.into_inner().as_str()).unwrap_or_default()
+    }
+
+    fn substitute_special(self) -> String {
+        match self {
+            Self::Special { name: '@', shell: _ } => "".into(),
+            Self::Special { name: '*', shell: _ } => "".into(),
+            Self::Special { name: '#', shell: _ } => "".into(),
+            Self::Special { name: '?', shell: _ } => "".into(),
+            Self::Special { name: '-', shell: _ } => "".into(),
+            Self::Special { name: '$', shell } => shell.borrow().pid.to_string(),
+            Self::Special { name: '!', shell: _ } => "".into(),
+            Self::Special { name: '0', shell } => shell.borrow().argv[0].clone(),
+            x => panic!("Special parameter \"${}\" is not recognized.",
+                        x.into_inner()),
+        }
     }
 }
 

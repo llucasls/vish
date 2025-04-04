@@ -1,9 +1,13 @@
 #[cfg(not(test))]
 use crate::vish::passwd::get_home;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 #[cfg(not(test))]
 use std::env::var as get_var;
 
+use crate::app::Shell;
 use crate::vish::command::ArgV;
 
 mod expand_parameter;
@@ -54,12 +58,14 @@ pub fn replace_tilde(user_input: String) -> String {
     }
 }
 
-pub fn parse_argv(text: &str) -> (ArgV, Option<char>) {
+pub fn parse_argv(shell: Rc<RefCell<Shell>>, text: &str) -> (ArgV, Option<char>) {
     let mut argv: ArgV = Vec::new();
     let mut in_quotes = false;
     let mut current_arg = String::new();
     let mut quote_char = '\0';
-    let substitute = |input| Field::new(replace_tilde(input)).substitute();
+    let substitute = |input| {
+        Field::new(Rc::clone(&shell), replace_tilde(input)).substitute()
+    };
 
     for c in text.chars() {
         match c {

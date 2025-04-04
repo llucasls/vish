@@ -1,16 +1,23 @@
+use std::cell::RefCell;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{self, Write};
-use std::process::{ExitCode, ExitStatus, Termination};
+use std::process::{self, ExitCode, ExitStatus, Termination};
+use std::rc::{Rc, Weak};
 use std::os::unix::process::ExitStatusExt;
 
 use crate::vish::buffer::Buffer;
-use crate::vish::command as cmd;
+use crate::vish::command::{self as cmd, ArgV};
 use crate::vish::environment::ShellEnvironment as Env;
 use crate::vish::io::InputReader;
 use crate::vish::string::parse_argv;
 
+#[derive(Debug)]
 pub struct Shell {
+    pub self_ref: Weak<RefCell<Shell>>,
+    pub argv: ArgV,
     pub env: Env,
+    pub pid: u32,
+    real_pid: u32,
 }
 
 pub struct ShellStatus {
@@ -23,6 +30,30 @@ trait Fail<T> {
 }
 
 impl Shell {
+    fn new() -> Rc<RefCell<Self>> {
+        let argv = std::env::args().collect::<ArgV>();
+        let env = Env::new();
+        let pid = process::id();
+        let real_pid = pid;
+        let self_ref = Weak::new();
+
+        let shell_rc = Rc::new(RefCell::new(Self {
+            self_ref,
+            argv,
+            env,
+            pid,
+            real_pid,
+        }));
+
+        shell_rc.borrow_mut().self_ref = Rc::downgrade(&shell_rc);
+
+        shell_rc
+    }
+
+    pub fn get_rc(&self) -> Rc<RefCell<Shell>> {
+        self.self_ref.upgrade().expect("Shell has been dropped")
+    }
+
     fn handle_batch_mode(&self) -> ShellStatus {
         let mut input_lines = Vec::new();
 
@@ -99,7 +130,7 @@ impl Shell {
             }
 
             let (argv, quote_char) = match buffer.as_str() {
-                Ok(text) => parse_argv(text),
+                Ok(text) => parse_argv(self.get_rc(), text),
                 Err(e) => { return Err(e).into(); },
             };
 
@@ -147,11 +178,17 @@ impl Shell {
     }
 
     pub fn main() -> impl Termination {
-        let shell = Shell { env: Env::new() };
+        let shell = Shell::new();
         match InputReader::new() {
-            Ok(mut reader) => shell.handle_interactive_mode(&mut reader),
-            Err(_) => shell.handle_batch_mode(),
+            Ok(mut reader) => shell.borrow().handle_interactive_mode(&mut reader),
+            Err(_) => shell.borrow().handle_batch_mode(),
         }
+    }
+}
+
+impl PartialEq for Shell {
+    fn eq(&self, other: &Self) -> bool {
+        self.real_pid == other.real_pid
     }
 }
 
