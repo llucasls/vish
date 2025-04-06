@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{self, Write};
 use std::process::{self, ExitCode, ExitStatus, Termination};
@@ -7,7 +8,6 @@ use std::os::unix::process::ExitStatusExt;
 
 use crate::vish::buffer::Buffer;
 use crate::vish::command::{self as cmd, ArgV};
-use crate::vish::environment::ShellEnvironment as Env;
 use crate::vish::io::InputReader;
 use crate::vish::string::parse_argv;
 
@@ -15,9 +15,15 @@ use crate::vish::string::parse_argv;
 pub struct Shell {
     pub self_ref: Weak<RefCell<Shell>>,
     pub argv: ArgV,
-    pub env: Env,
+    pub vars: HashMap<String, ShellVariable>,
     pub pid: u32,
     real_pid: u32,
+}
+
+#[derive(Debug)]
+pub struct ShellVariable {
+    pub value: String,
+    pub exported: bool,
 }
 
 pub struct ShellStatus {
@@ -32,15 +38,18 @@ trait Fail<T> {
 impl Shell {
     pub fn new() -> Rc<RefCell<Self>> {
         let argv = std::env::args().collect::<ArgV>();
-        let env = Env::new();
         let pid = process::id();
         let real_pid = pid;
         let self_ref = Weak::new();
 
+        let environment_variables = std::env::vars()
+            .map(|(key, value)| (key, ShellVariable { value, exported: true }));
+        let vars = HashMap::from_iter(environment_variables);
+
         let shell_rc = Rc::new(RefCell::new(Self {
             self_ref,
             argv,
-            env,
+            vars,
             pid,
             real_pid,
         }));
@@ -48,6 +57,60 @@ impl Shell {
         shell_rc.borrow_mut().self_ref = Rc::downgrade(&shell_rc);
 
         shell_rc
+    }
+
+    pub fn get_var(&self, name: &str) -> String {
+        match self.vars.get(name) {
+            Some(var) => var.value.clone(),
+            None => String::new(),
+        }
+    }
+
+    pub fn set_var(&mut self, name: &str, value: &str) {
+        match self.vars.get_mut(name) {
+            Some(var) => {
+                var.value = value.to_string();
+                if var.exported {
+                    unsafe {
+                        std::env::set_var(name, value.to_string());
+                    }
+                }
+            },
+            None => {
+                self.vars.insert(name.to_string(), ShellVariable {
+                    value: value.to_string(),
+                    exported: false,
+                });
+            }
+        }
+    }
+
+    pub fn export_var(&mut self, name: &str) {
+        match self.vars.get_mut(name) {
+            Some(ShellVariable { exported: true, .. }) => {},
+            Some(var) => {
+                var.exported = true;
+                unsafe {
+                    std::env::set_var(name, var.value.clone());
+                }
+            },
+            None => {
+                self.vars.insert(name.to_string(), ShellVariable {
+                    value: String::new(),
+                    exported: true,
+                });
+                unsafe {
+                    std::env::set_var(name, String::new());
+                }
+            }
+        }
+    }
+
+    pub fn unset_var(&mut self, name: &str) {
+        self.vars.remove(name);
+        unsafe {
+            std::env::remove_var(name);
+        }
     }
 
     pub fn get_rc(&self) -> Rc<RefCell<Shell>> {
@@ -75,12 +138,7 @@ impl Shell {
 
         macro_rules! draw_prompt {
             ($key:expr, $stdout:expr) => {{
-                let unset_value = String::new();
-                let prompt = self
-                    .env
-                    .shell_variables
-                    .get($key)
-                    .unwrap_or(&unset_value);
+                let prompt = self.get_var($key);
                 if $stdout.write_all(prompt.as_bytes()).is_err() {
                     return ShellStatus::fail("failed to write to stdout");
                 }
