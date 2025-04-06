@@ -39,6 +39,7 @@ macro_rules! delete_previous_char {
         $index -= 1;
         $vector.remove($index);
         $stdout.write_all(b"\x08 \x08")?;
+        reprint_line!($stdout, $vector);
         $stdout.flush()?;
         continue;
     }}
