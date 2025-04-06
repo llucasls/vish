@@ -30,7 +30,7 @@ trait Fail<T> {
 }
 
 impl Shell {
-    fn new() -> Rc<RefCell<Self>> {
+    pub fn new() -> Rc<RefCell<Self>> {
         let argv = std::env::args().collect::<ArgV>();
         let env = Env::new();
         let pid = process::id();
