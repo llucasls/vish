@@ -83,7 +83,6 @@ macro_rules! delete_char {
 
 macro_rules! go_to_start {
     ($index:expr, $stdout:expr) => {{
-        //move_cursor(-($index as isize))?;
         move_cursor!(-($index as isize), $stdout);
         $stdout.flush()?;
         $index = 0;
@@ -93,7 +92,6 @@ macro_rules! go_to_start {
 
 macro_rules! go_to_end {
     ($index:expr, $vector:expr, $stdout:expr) => {{
-        //move_cursor(($vector.len() - $index) as isize)?;
         move_cursor!(($vector.len() - $index), $stdout);
         $stdout.flush()?;
         $index = $vector.len();
@@ -112,7 +110,6 @@ macro_rules! move_left {
     ($index:expr, $inner_vector:expr, $stdout:expr) => {{
         $inner_vector.clear();
         if $index > 0 {
-            //move_cursor(-1)?;
             move_cursor!(-1, $stdout);
             $stdout.flush()?;
             $index -= 1;
@@ -125,7 +122,6 @@ macro_rules! move_right {
     ($index:expr, $inner_vector:expr, $outer_vector:expr, $stdout:expr) => {{
         $inner_vector.clear();
         if $index < $outer_vector.len() {
-            //move_cursor(1)?;
             move_cursor!(1, $stdout);
             $stdout.flush()?;
             $index += 1;
@@ -140,7 +136,6 @@ macro_rules! store_character {
         if $i < $outer_vec.len() {
             $outer_vec.insert($i, $inner_vec.clone());
             reprint_line!($stdout, &$outer_vec);
-            //move_cursor(1)?;
             move_cursor!(1, $stdout);
             $stdout.flush()?;
         } else {
