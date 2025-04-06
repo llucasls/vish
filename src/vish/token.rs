@@ -68,4 +68,6 @@ pub enum Token {
     Bang,
     /// `in`
     In,
+    /// A meta-character token.
+    Meta(char),
 }
