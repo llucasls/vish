@@ -211,12 +211,14 @@ fn get_var(name: &str) -> Result<String, VarError> {
 
 #[cfg(test)]
 mod test {
-    use super::Field;
+    use super::*;
+    use crate::app::Shell;
 
     #[test]
     fn should_pass() {
+        let shell = Shell::new();
         assert_eq!(
-            Field::new(String::from("$HOME")),
+            Field::new(shell, String::from("$HOME")),
             Field::Parameter(String::from("HOME")),
         );
     }

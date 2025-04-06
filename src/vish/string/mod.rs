@@ -175,14 +175,16 @@ mod replace_tilde {
 }
 
 #[cfg(test)]
-mod parse_argv {
-    use super::parse_argv;
+mod test_parse_argv {
+    use super::*;
+    use crate::app::Shell;
 
     #[test]
     fn parse_argv_basic() {
         let input = "echo hello world";
         let expected = vec!["echo", "hello", "world"];
-        let (result, quote_char) = parse_argv(input);
+        let shell = Shell::new();
+        let (result, quote_char) = parse_argv(shell, input);
         assert_eq!(result, expected);
         assert_eq!(quote_char, None);
     }
@@ -191,7 +193,8 @@ mod parse_argv {
     fn parse_argv_with_tilde() {
         let input = "cd ~";
         let expected = vec!["cd", "/home/kevin"];
-        let (result, quote_char) = parse_argv(input);
+        let shell = Shell::new();
+        let (result, quote_char) = parse_argv(shell, input);
         assert_eq!(result, expected);
         assert_eq!(quote_char, None);
     }
@@ -200,7 +203,8 @@ mod parse_argv {
     fn parse_argv_with_tilde_and_path() {
         let input = "cd ~/projects";
         let expected = vec!["cd", "/home/kevin/projects"];
-        let (result, quote_char) = parse_argv(input);
+        let shell = Shell::new();
+        let (result, quote_char) = parse_argv(shell, input);
         assert_eq!(result, expected);
         assert_eq!(quote_char, None);
     }
@@ -209,7 +213,8 @@ mod parse_argv {
     fn parse_argv_with_quoted_string() {
         let input = "echo \"hello world\"";
         let expected = vec!["echo", "hello world"];
-        let (result, quote_char) = parse_argv(input);
+        let shell = Shell::new();
+        let (result, quote_char) = parse_argv(shell, input);
         assert_eq!(result, expected);
         assert_eq!(quote_char, None);
     }
@@ -218,7 +223,8 @@ mod parse_argv {
     fn parse_argv_with_multiple_quoted_strings() {
         let input = "echo \"hello world\" 'and universe'";
         let expected = vec!["echo", "hello world", "and universe"];
-        let (result, quote_char) = parse_argv(input);
+        let shell = Shell::new();
+        let (result, quote_char) = parse_argv(shell, input);
         assert_eq!(result, expected);
         assert_eq!(quote_char, None);
     }
@@ -231,7 +237,8 @@ mod parse_argv {
             "/home/john/file with spaces.txt",
             "/home/john/backup/",
         ];
-        let (result, quote_char) = parse_argv(input);
+        let shell = Shell::new();
+        let (result, quote_char) = parse_argv(shell, input);
         assert_eq!(result, expected);
         assert_eq!(quote_char, None);
     }
@@ -240,7 +247,8 @@ mod parse_argv {
     fn parse_argv_with_single_quotes() {
         let input = "touch 'test output.log'";
         let expected = vec!["touch", "test output.log"];
-        let (result, quote_char) = parse_argv(input);
+        let shell = Shell::new();
+        let (result, quote_char) = parse_argv(shell, input);
         assert_eq!(result, expected);
         assert_eq!(quote_char, None);
     }
@@ -249,7 +257,8 @@ mod parse_argv {
     fn parse_argv_with_empty_string() {
         let input = "";
         let expected: Vec<String> = Vec::new();
-        let (result, quote_char) = parse_argv(input);
+        let shell = Shell::new();
+        let (result, quote_char) = parse_argv(shell, input);
         assert_eq!(result, expected);
         assert_eq!(quote_char, None);
     }
