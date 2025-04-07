@@ -1,5 +1,5 @@
 //! General-purpose utilities and libc bindings that don't fit cleanly elsewhere.
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 
 use libc;
 
