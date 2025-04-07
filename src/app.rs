@@ -10,7 +10,7 @@ use crate::vish::buffer::Buffer;
 use crate::vish::command::{self as cmd, ArgV};
 use crate::vish::io::InputReader;
 use crate::vish::string::parse_argv;
-use crate::util::get_ppid;
+use crate::util::{Home, get_ppid, get_uid, get_login};
 
 #[derive(Debug)]
 pub struct Shell {
@@ -45,9 +45,50 @@ impl Shell {
         let real_pid = pid;
         let self_ref = Weak::new();
 
+        let username: String = get_login().unwrap_or_default();
+        let binding = std::env::current_dir()
+            .unwrap_or_default();
+        let current_dir: &str = binding
+            .to_str()
+            .unwrap_or_default();
+
+        let default_path = "/usr/local/bin:/bin:/usr/bin";
+        let root_path = [
+            "/usr/local/sbin",
+            "/usr/local/bin",
+            "/sbin",
+            "/bin",
+            "/usr/sbin",
+            "/usr/bin",
+        ].join(":");
+
+        let default_vars_pairs = [
+            ("HOME", &Home::from_uid(get_uid()).unwrap_or_default()),
+            ("IFS", &String::from_utf8(b" \t\n".to_vec()).unwrap_or_default()),
+            ("LINENO", "1"),
+            ("LOGNAME", &username),
+            ("PATH", if get_uid() == 0 { root_path } else { default_path }),
+            ("PPID", &ppid.to_string()),
+            ("PS1", if get_uid() == 0 { "# " } else { "$ " }),
+            ("PS2", "> "),
+            ("PS3", "#? "),
+            ("PS4", "+ "),
+            ("PWD", current_dir),
+            ("USER", &username),
+        ];
+        let mut vars: HashMap<String, ShellVariable> = HashMap::new();
+        for (key, val) in default_vars_pairs {
+            let name = key.to_string();
+            let value = val.to_string();
+            vars.insert(name, ShellVariable { value, exported: false });
+        }
+
         let environment_variables = std::env::vars()
             .map(|(key, value)| (key, ShellVariable { value, exported: true }));
-        let vars = HashMap::from_iter(environment_variables);
+
+        for (name, value) in environment_variables {
+            vars.insert(name, value);
+        }
 
         let shell_rc = Rc::new(RefCell::new(Self {
             self_ref,
