@@ -48,12 +48,12 @@ impl Shell {
         let username: String = get_login().unwrap_or_default();
         let binding = std::env::current_dir()
             .unwrap_or_default();
-        let current_dir: &str = binding
+        let current_dir: String = binding
             .to_str()
-            .unwrap_or_default();
+            .unwrap_or_default().to_string();
 
-        let default_path = "/usr/local/bin:/bin:/usr/bin";
-        let root_path = [
+        let default_path = String::from("/usr/local/bin:/bin:/usr/bin");
+        let root_path: String = [
             "/usr/local/sbin",
             "/usr/local/bin",
             "/sbin",
@@ -65,15 +65,15 @@ impl Shell {
         let default_vars_pairs = [
             ("HOME", &Home::from_uid(get_uid()).unwrap_or_default()),
             ("IFS", &String::from_utf8(b" \t\n".to_vec()).unwrap_or_default()),
-            ("LINENO", "1"),
+            ("LINENO", &String::from("1")),
             ("LOGNAME", &username),
-            ("PATH", if get_uid() == 0 { root_path } else { default_path }),
+            ("PATH", if get_uid() == 0 { &root_path } else { &default_path }),
             ("PPID", &ppid.to_string()),
-            ("PS1", if get_uid() == 0 { "# " } else { "$ " }),
-            ("PS2", "> "),
-            ("PS3", "#? "),
-            ("PS4", "+ "),
-            ("PWD", current_dir),
+            ("PS1", &String::from(if get_uid() == 0 { "# " } else { "$ " })),
+            ("PS2", &String::from("> ")),
+            ("PS3", &String::from("#? ")),
+            ("PS4", &String::from("+ ")),
+            ("PWD", &current_dir),
             ("USER", &username),
         ];
         let mut vars: HashMap<String, ShellVariable> = HashMap::new();
