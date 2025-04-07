@@ -7,7 +7,7 @@ use std::process::{self, ExitCode, ExitStatus, Termination};
 use std::rc::{Rc, Weak};
 use std::os::unix::process::ExitStatusExt;
 
-use libc::{endpwent, getpwnam, getpwuid, passwd};
+use libc;
 
 use crate::vish::buffer::Buffer;
 use crate::vish::command::{self as cmd, ArgV};
@@ -22,8 +22,8 @@ impl Home {
 
         unsafe {
             let raw_name: *const i8 = c_string_name.as_ptr();
-            let pw: *mut passwd = getpwnam(raw_name);
-            endpwent();
+            let pw: *mut libc::passwd = libc::getpwnam(raw_name);
+            libc::endpwent();
 
             if pw.is_null() {
                 return None;
@@ -38,8 +38,8 @@ impl Home {
 
     pub fn from_user_id(uid: u32) -> Option<String> {
         unsafe {
-            let pw: *mut passwd = getpwuid(uid);
-            endpwent();
+            let pw: *mut libc::passwd = libc::getpwuid(uid);
+            libc::endpwent();
 
             if pw.is_null() {
                 return None;
