@@ -1,6 +1,3 @@
-#[cfg(not(test))]
-use crate::vish::passwd::get_home;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -18,6 +15,8 @@ pub use substitute_command::substitute_command;
 
 mod field;
 pub use field::Field;
+
+use crate::util::Home;
 
 pub fn replace_tilde(user_input: String) -> String {
     let tilde_index = user_input.find('~');
@@ -38,7 +37,7 @@ pub fn replace_tilde(user_input: String) -> String {
             Some(end) => user_input[1..end].to_string(),
             None => user_input[1..].to_string(),
         };
-        match get_home(user) {
+        match Home::from_username(user) {
             Some(home) => {
                 let mut output = user_input.clone();
                 match bar_index {
@@ -101,11 +100,13 @@ pub fn parse_argv(shell: Rc<RefCell<Shell>>, text: &str) -> (ArgV, Option<char>)
 }
 
 #[cfg(test)]
-fn get_home(user: String) -> Option<String> {
-    let mut home_dirs = std::collections::HashMap::new();
-    home_dirs.insert(String::from("root"), String::from("/root"));
-    home_dirs.insert(String::from("john"), String::from("/home/john"));
-    home_dirs.get(&user).cloned()
+impl Home {
+    pub fn from_username(user: String) -> Option<String> {
+        let mut home_dirs = std::collections::HashMap::new();
+        home_dirs.insert(String::from("root"), String::from("/root"));
+        home_dirs.insert(String::from("john"), String::from("/home/john"));
+        home_dirs.get(&user).cloned()
+    }
 }
 
 #[cfg(test)]
@@ -115,7 +116,7 @@ fn get_var(_: &str) -> Result<String, std::env::VarError> {
 
 #[cfg(test)]
 mod replace_tilde {
-    use super::replace_tilde;
+    use super::*;
 
     #[test]
     fn replace_single_tilde_with_home() {

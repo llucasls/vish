@@ -1,5 +1,5 @@
 //! General-purpose utilities and libc bindings that don't fit cleanly elsewhere.
-use std::ffi::{CStr, CString};
+use std::ffi;
 
 use libc;
 
@@ -27,8 +27,9 @@ impl Home {
     /// Returns `Some(String)` containing the path to the user's home directory
     /// if found, or `None` if the username does not exist or the path is not
     /// valid UTF-8.
+    #[cfg(not(test))]
     pub fn from_username(name: String) -> Option<String> {
-        let c_string_name = CString::new(name.into_bytes()).ok()?;
+        let c_string_name = ffi::CString::new(name.into_bytes()).ok()?;
 
         unsafe {
             let raw_name: *const i8 = c_string_name.as_ptr();
@@ -39,7 +40,7 @@ impl Home {
                 return None;
             }
 
-            match CStr::from_ptr((*pw).pw_dir).to_str() {
+            match ffi::CStr::from_ptr((*pw).pw_dir).to_str() {
                 Ok(home) => Some(String::from(home)),
                 Err(_) => None,
             }
@@ -60,7 +61,7 @@ impl Home {
                 return None;
             }
 
-            match CStr::from_ptr((*pw).pw_dir).to_str() {
+            match ffi::CStr::from_ptr((*pw).pw_dir).to_str() {
                 Ok(home) => Some(String::from(home)),
                 Err(_) => None,
             }
@@ -84,7 +85,7 @@ pub fn get_login() -> Option<String> {
         if login_ptr.is_null() {
             return None;
         }
-        match CStr::from_ptr(login_ptr).to_str() {
+        match ffi::CStr::from_ptr(login_ptr).to_str() {
             Ok(login) => Some(String::from(login)),
             Err(_) => None,
         }
