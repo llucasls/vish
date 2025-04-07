@@ -10,7 +10,7 @@ use crate::vish::buffer::Buffer;
 use crate::vish::command::{self as cmd, ArgV};
 use crate::vish::io::InputReader;
 use crate::vish::string::parse_argv;
-use crate::util::{Home, get_ppid, get_uid, get_login};
+use crate::util::{Home, get_ppid, get_uid, get_login, get_shell};
 
 #[derive(Debug)]
 pub struct Shell {
@@ -45,13 +45,6 @@ impl Shell {
         let real_pid = pid;
         let self_ref = Weak::new();
 
-        let username: String = get_login().unwrap_or_default();
-        let binding = std::env::current_dir()
-            .unwrap_or_default();
-        let current_dir: String = binding
-            .to_str()
-            .unwrap_or_default().to_string();
-
         let default_path = String::from("/usr/local/bin:/bin:/usr/bin");
         let root_path: String = [
             "/usr/local/sbin",
@@ -63,24 +56,39 @@ impl Shell {
         ].join(":");
 
         let default_vars_pairs = [
-            ("HOME", &Home::from_uid(get_uid()).unwrap_or_default()),
             ("IFS", &String::from_utf8(b" \t\n".to_vec()).unwrap_or_default()),
             ("LINENO", &String::from("1")),
-            ("LOGNAME", &username),
             ("PATH", if get_uid() == 0 { &root_path } else { &default_path }),
             ("PPID", &ppid.to_string()),
             ("PS1", &String::from(if get_uid() == 0 { "# " } else { "$ " })),
             ("PS2", &String::from("> ")),
             ("PS3", &String::from("#? ")),
             ("PS4", &String::from("+ ")),
-            ("PWD", &current_dir),
-            ("USER", &username),
         ];
         let mut vars: HashMap<String, ShellVariable> = HashMap::new();
         for (key, val) in default_vars_pairs {
             let name = key.to_string();
             let value = val.to_string();
             vars.insert(name, ShellVariable { value, exported: false });
+        }
+
+        let username = get_login();
+        let pwd = std::env::current_dir().ok()
+            .and_then(|pb| pb.to_str().map(|s| s.to_string()));
+
+        let default_optional_vars = [
+            ("HOME", Home::from_uid(get_uid())),
+            ("LOGNAME", username.clone()),
+            ("PWD", pwd),
+            ("SHELL", get_shell(get_uid())),
+            ("USER", username),
+        ];
+
+        for (key, opt) in default_optional_vars {
+            if let Some(value) = opt {
+                let name = key.to_string();
+                vars.insert(name, ShellVariable { value, exported: false });
+            }
         }
 
         let environment_variables = std::env::vars()
