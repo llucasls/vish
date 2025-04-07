@@ -1,58 +1,16 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ffi::{CStr, CString};
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{self, Write};
 use std::process::{self, ExitCode, ExitStatus, Termination};
 use std::rc::{Rc, Weak};
 use std::os::unix::process::ExitStatusExt;
 
-use libc;
-
 use crate::vish::buffer::Buffer;
 use crate::vish::command::{self as cmd, ArgV};
 use crate::vish::io::InputReader;
 use crate::vish::string::parse_argv;
 use crate::util::get_ppid;
-
-pub struct Home;
-
-impl Home {
-    pub fn from_username(name: String) -> Option<String> {
-        let c_string_name = CString::new(name.into_bytes()).ok()?;
-
-        unsafe {
-            let raw_name: *const i8 = c_string_name.as_ptr();
-            let pw: *mut libc::passwd = libc::getpwnam(raw_name);
-            libc::endpwent();
-
-            if pw.is_null() {
-                return None;
-            }
-
-            match CStr::from_ptr((*pw).pw_dir).to_str() {
-                Ok(home) => Some(String::from(home)),
-                Err(_) => None,
-            }
-        }
-    }
-
-    pub fn from_uid(uid: u32) -> Option<String> {
-        unsafe {
-            let pw: *mut libc::passwd = libc::getpwuid(uid);
-            libc::endpwent();
-
-            if pw.is_null() {
-                return None;
-            }
-
-            match CStr::from_ptr((*pw).pw_dir).to_str() {
-                Ok(home) => Some(String::from(home)),
-                Err(_) => None,
-            }
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct Shell {
