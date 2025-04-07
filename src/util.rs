@@ -97,6 +97,28 @@ pub fn get_ppid() -> u32 {
     unsafe { libc::getppid() as u32 }
 }
 
+/// Returns the login shell of the user with a given UID.
+///
+/// ## Warning:
+/// Vish should not be considered ready for production use before its
+/// first major release (v1.0.0). Thus it should not be used as a login
+/// shell.
+pub fn get_shell(uid: u32) -> Option<String> {
+    unsafe {
+        let pw: *mut libc::passwd = libc::getpwuid(uid);
+        libc::endpwent();
+
+        if pw.is_null() {
+            return None;
+        }
+
+        match ffi::CStr::from_ptr((*pw).pw_shell).to_str() {
+            Ok(shell) => Some(String::from(shell)),
+            Err(_) => None,
+        }
+    }
+}
+
 /// Returns the real user ID of the current process.
 pub fn get_uid() -> u32 {
     unsafe { libc::getuid() }
