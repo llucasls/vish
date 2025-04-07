@@ -13,6 +13,7 @@ use crate::vish::buffer::Buffer;
 use crate::vish::command::{self as cmd, ArgV};
 use crate::vish::io::InputReader;
 use crate::vish::string::parse_argv;
+use crate::util::get_ppid;
 
 pub struct Home;
 
@@ -59,6 +60,7 @@ pub struct Shell {
     pub argv: ArgV,
     pub vars: HashMap<String, ShellVariable>,
     pub pid: u32,
+    pub ppid: u32,
     real_pid: u32,
 }
 
@@ -81,6 +83,7 @@ impl Shell {
     pub fn new() -> Rc<RefCell<Self>> {
         let argv = std::env::args().collect::<ArgV>();
         let pid = process::id();
+        let ppid = get_ppid();
         let real_pid = pid;
         let self_ref = Weak::new();
 
@@ -93,6 +96,7 @@ impl Shell {
             argv,
             vars,
             pid,
+            ppid,
             real_pid,
         }));
 
