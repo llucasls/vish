@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.1] - 2025-04-07
+### Fixed
+- Reprint input line when erasing with `Backspace`.
+
 ## [0.2.0] - 2025-03-22
 ### Added
 - Support for `Ctrl+A` (move to start of line) and `Ctrl+E` (move to end of line).
