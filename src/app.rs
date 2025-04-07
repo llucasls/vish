@@ -114,7 +114,7 @@ impl Shell {
                 var.value = value.to_string();
                 if var.exported {
                     unsafe {
-                        std::env::set_var(name, value.to_string());
+                        std::env::set_var(name, value);
                     }
                 }
             },
