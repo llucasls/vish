@@ -36,7 +36,7 @@ impl Home {
         }
     }
 
-    pub fn from_user_id(uid: u32) -> Option<String> {
+    pub fn from_uid(uid: u32) -> Option<String> {
         unsafe {
             let pw: *mut libc::passwd = libc::getpwuid(uid);
             libc::endpwent();
