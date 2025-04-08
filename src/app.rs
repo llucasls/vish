@@ -1,9 +1,7 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{self, Write};
 use std::process::{self, ExitCode, ExitStatus, Termination};
-use std::rc::{Rc, Weak};
 use std::os::unix::process::ExitStatusExt;
 
 use crate::vish::buffer::Buffer;
@@ -14,7 +12,6 @@ use crate::util::{Home, get_ppid, get_uid, get_login, get_shell};
 
 #[derive(Debug)]
 pub struct Shell {
-    pub self_ref: Weak<RefCell<Shell>>,
     pub argv: ArgV,
     pub vars: HashMap<String, ShellVariable>,
     pub pid: u32,
@@ -38,12 +35,11 @@ trait Fail<T> {
 }
 
 impl Shell {
-    pub fn new() -> Rc<RefCell<Self>> {
+    pub fn new() -> Self {
         let argv = std::env::args().collect::<ArgV>();
         let pid = process::id();
         let ppid = get_ppid();
         let real_pid = pid;
-        let self_ref = Weak::new();
 
         let default_path = String::from("/usr/local/bin:/bin:/usr/bin");
         let root_path: String = [
@@ -98,18 +94,13 @@ impl Shell {
             vars.insert(name, value);
         }
 
-        let shell_rc = Rc::new(RefCell::new(Self {
-            self_ref,
+        Self {
             argv,
             vars,
             pid,
             ppid,
             real_pid,
-        }));
-
-        shell_rc.borrow_mut().self_ref = Rc::downgrade(&shell_rc);
-
-        shell_rc
+        }
     }
 
     pub fn get_var(&self, name: &str) -> String {
@@ -164,10 +155,6 @@ impl Shell {
         unsafe {
             std::env::remove_var(name);
         }
-    }
-
-    pub fn get_rc(&self) -> Rc<RefCell<Shell>> {
-        self.self_ref.upgrade().expect("Shell has been dropped")
     }
 
     fn handle_batch_mode(&self) -> ShellStatus {
@@ -241,7 +228,7 @@ impl Shell {
             }
 
             let (argv, quote_char) = match buffer.as_str() {
-                Ok(text) => parse_argv(self.get_rc(), text),
+                Ok(text) => parse_argv(text),
                 Err(e) => { return Err(e).into(); },
             };
 
@@ -291,8 +278,8 @@ impl Shell {
     pub fn main() -> impl Termination {
         let shell = Shell::new();
         match InputReader::new() {
-            Ok(mut reader) => shell.borrow().handle_interactive_mode(&mut reader),
-            Err(_) => shell.borrow().handle_batch_mode(),
+            Ok(mut reader) => shell.handle_interactive_mode(&mut reader),
+            Err(_) => shell.handle_batch_mode(),
         }
     }
 }

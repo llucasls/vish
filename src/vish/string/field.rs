@@ -1,11 +1,6 @@
 #[cfg(not(test))]
 use std::env::var as get_var;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use crate::app::Shell;
-
 /// Represents different types of shell fields, which may undergo various forms of expansion.
 #[derive(Debug, PartialEq)]
 pub enum Field<T> {
@@ -32,7 +27,7 @@ pub enum Field<T> {
     Position(T),
 
     /// A special parameter, such as `$@`, `$*`, `$#`, `$?`, `$-`, `$$`, `$!`, or `$0`.
-    Special { shell: Rc<RefCell<Shell>>, name: char },
+    Special(char),
 }
 
 fn is_valid_parameter(par: &str) -> bool {
@@ -114,7 +109,7 @@ fn get_parameter_name(text: String) -> (String, String) {
 }
 
 impl Field<String> {
-    pub fn new(shell: Rc<RefCell<Shell>>, text: String) -> Self {
+    pub fn new(text: String) -> Self {
         let size: usize = text.len();
 
         if ! text.starts_with('$') {
@@ -124,7 +119,7 @@ impl Field<String> {
                 Some(character) => character,
                 None => { return Self::Plain(String::new()); },
             };
-            Self::Special { shell, name }
+            Self::Special(name)
         } else if is_unenclosed_parameter(&text) {
             let (par, _rest) = get_parameter_name(String::from(&text[1..]));
             Self::Parameter(par)
@@ -160,7 +155,7 @@ impl Field<String> {
             Self::Quoted(text) => text,
             Self::CStyleQuoted(text) => text,
             Self::Position(number) => number,
-            Self::Special { name, .. } => name.to_string(),
+            Self::Special(name) => name.to_string(),
         }
     }
 
@@ -173,7 +168,7 @@ impl Field<String> {
             Self::Quoted(text) => format!("quoted: {}", text),
             Self::CStyleQuoted(text) => format!("quoted: {}", text),
             Self::Position(text) => format!("positional parameter: {}", text),
-            Self::Special { .. } => self.substitute_special(),
+            Self::Special(_) => self.substitute_special(),
         }
     }
 
@@ -182,15 +177,17 @@ impl Field<String> {
     }
 
     fn substitute_special(self) -> String {
+        let pid = std::process::id();
+        let argv = std::env::args().collect::<Vec<String>>();
         match self {
-            Self::Special { name: '@', shell: _ } => "".into(),
-            Self::Special { name: '*', shell: _ } => "".into(),
-            Self::Special { name: '#', shell: _ } => "".into(),
-            Self::Special { name: '?', shell: _ } => "".into(),
-            Self::Special { name: '-', shell: _ } => "".into(),
-            Self::Special { name: '$', shell } => shell.borrow().pid.to_string(),
-            Self::Special { name: '!', shell: _ } => "".into(),
-            Self::Special { name: '0', shell } => shell.borrow().argv[0].clone(),
+            Self::Special('@') => "".into(),
+            Self::Special('*') => "".into(),
+            Self::Special('#') => "".into(),
+            Self::Special('?') => "".into(),
+            Self::Special('-') => "".into(),
+            Self::Special('$') => pid.to_string(),
+            Self::Special('!') => "".into(),
+            Self::Special('0') => argv[0].clone(),
             x => panic!("Special parameter \"${}\" is not recognized.",
                         x.into_inner()),
         }
