@@ -23,7 +23,10 @@ macro_rules! move_cursor {
 #[macro_export]
 macro_rules! reprint_line {
     ($stdout:expr, $data_list:expr) => {{
-        let ps1 = std::env::var("PS1").unwrap_or(String::new());
+        let ps1 = match crate::ENV.read() {
+            Ok(shell) => shell.get_var("PS1").unwrap_or(String::new()),
+            Err(_) => String::new(),
+        };
         $stdout.write_all(b"\x1b[s")?;
         kill_line!($stdout);
         $stdout.write_all(ps1.as_bytes())?;
