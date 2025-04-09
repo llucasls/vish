@@ -59,6 +59,9 @@ pub struct Shell {
     /// The parent process ID (`$PPID`).
     pub ppid: u32,
 
+    /// The exit status of the last command.
+    pub status: u8,
+
     real_pid: u32,
 }
 
@@ -137,6 +140,7 @@ impl Shell {
         let pid = process::id();
         let ppid = get_ppid();
         let opts = ShellOptions::new();
+        let status = 0;
         let real_pid = process::id();
 
         let mut vars: HashMap<String, ShellVariable> = HashMap::new();
@@ -171,6 +175,7 @@ impl Shell {
             pid,
             ppid,
             opts,
+            status,
             real_pid,
         }
     }
@@ -306,6 +311,7 @@ impl Default for Shell {
             pid: 1,
             ppid: 0,
             opts: ShellOptions::new(),
+            status: 0,
             real_pid: process::id(),
         }
     }

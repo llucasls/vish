@@ -184,17 +184,19 @@ impl Field<String> {
     }
 
     fn substitute_special(self) -> String {
-        let pid = std::process::id();
-        let argv = std::env::args().collect::<Vec<String>>();
+        let shell = match crate::ENV.read() {
+            Ok(shell) => shell,
+            Err(_) => { return String::new(); },
+        };
         match self {
             Self::Special('@') => "".into(),
             Self::Special('*') => "".into(),
             Self::Special('#') => "".into(),
-            Self::Special('?') => "".into(),
+            Self::Special('?') => shell.status.to_string(),
             Self::Special('-') => "".into(),
-            Self::Special('$') => pid.to_string(),
+            Self::Special('$') => shell.pid.to_string(),
             Self::Special('!') => "".into(),
-            Self::Special('0') => argv[0].clone(),
+            Self::Special('0') => shell.argv[0].clone(),
             x => panic!("Special parameter \"${}\" is not recognized.",
                         x.into_inner()),
         }

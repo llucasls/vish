@@ -135,6 +135,11 @@ impl App {
                 "false" => 1,
                 _ => cmd::run_command(argv),
             };
+
+            match crate::ENV.write() {
+                Ok(mut shell) => { shell.status = last_cmd_code; },
+                Err(e) => { return AppStatus::fail(e); },
+            }
         };
 
         match reader.disable_raw_mode() {
