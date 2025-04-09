@@ -1,31 +1,16 @@
-use std::collections::HashMap;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{self, Write};
-use std::process::{self, ExitCode, ExitStatus, Termination};
+use std::process::{ExitCode, ExitStatus, Termination};
 use std::os::unix::process::ExitStatusExt;
 
 use crate::vish::buffer::Buffer;
-use crate::vish::command::{self as cmd, ArgV};
+use crate::vish::command::{self as cmd};
 use crate::vish::io::InputReader;
 use crate::vish::string::parse_argv;
-use crate::util::{Home, get_ppid, get_uid, get_login, get_shell};
 
-#[derive(Debug)]
-pub struct Shell {
-    pub argv: ArgV,
-    pub vars: HashMap<String, ShellVariable>,
-    pub pid: u32,
-    pub ppid: u32,
-    real_pid: u32,
-}
+pub struct App;
 
-#[derive(Debug)]
-pub struct ShellVariable {
-    pub value: String,
-    pub exported: bool,
-}
-
-pub struct ShellStatus {
+pub struct AppStatus {
     msg: String,
     code: i32,
 }
@@ -34,153 +19,36 @@ trait Fail<T> {
     fn fail(msg: T) -> Self;
 }
 
-impl Shell {
-    pub fn new() -> Self {
-        let argv = std::env::args().collect::<ArgV>();
-        let pid = process::id();
-        let ppid = get_ppid();
-        let real_pid = pid;
-
-        let default_path = String::from("/usr/local/bin:/bin:/usr/bin");
-        let root_path: String = [
-            "/usr/local/sbin",
-            "/usr/local/bin",
-            "/sbin",
-            "/bin",
-            "/usr/sbin",
-            "/usr/bin",
-        ].join(":");
-
-        let default_vars_pairs = [
-            ("IFS", &String::from_utf8(b" \t\n".to_vec()).unwrap_or_default()),
-            ("LINENO", &String::from("1")),
-            ("PATH", if get_uid() == 0 { &root_path } else { &default_path }),
-            ("PPID", &ppid.to_string()),
-            ("PS1", &String::from(if get_uid() == 0 { "# " } else { "$ " })),
-            ("PS2", &String::from("> ")),
-            ("PS3", &String::from("#? ")),
-            ("PS4", &String::from("+ ")),
-        ];
-        let mut vars: HashMap<String, ShellVariable> = HashMap::new();
-        for (key, val) in default_vars_pairs {
-            let name = key.to_string();
-            let value = val.to_string();
-            vars.insert(name, ShellVariable { value, exported: false });
-        }
-
-        let username = get_login();
-        let pwd = std::env::current_dir().ok()
-            .and_then(|pb| pb.to_str().map(|s| s.to_string()));
-
-        let default_optional_vars = [
-            ("HOME", Home::from_uid(get_uid())),
-            ("LOGNAME", username.clone()),
-            ("PWD", pwd),
-            ("SHELL", get_shell(get_uid())),
-            ("USER", username),
-        ];
-
-        for (key, opt) in default_optional_vars {
-            if let Some(value) = opt {
-                let name = key.to_string();
-                vars.insert(name, ShellVariable { value, exported: false });
-            }
-        }
-
-        let environment_variables = std::env::vars()
-            .map(|(key, value)| (key, ShellVariable { value, exported: true }));
-
-        for (name, value) in environment_variables {
-            vars.insert(name, value);
-        }
-
-        Self {
-            argv,
-            vars,
-            pid,
-            ppid,
-            real_pid,
-        }
-    }
-
-    pub fn get_var(&self, name: &str) -> String {
-        match self.vars.get(name) {
-            Some(var) => var.value.clone(),
-            None => String::new(),
-        }
-    }
-
-    pub fn set_var(&mut self, name: &str, value: &str) {
-        match self.vars.get_mut(name) {
-            Some(var) => {
-                var.value = value.to_string();
-                if var.exported {
-                    unsafe {
-                        std::env::set_var(name, value);
-                    }
-                }
-            },
-            None => {
-                self.vars.insert(name.to_string(), ShellVariable {
-                    value: value.to_string(),
-                    exported: false,
-                });
-            }
-        }
-    }
-
-    pub fn export_var(&mut self, name: &str) {
-        match self.vars.get_mut(name) {
-            Some(ShellVariable { exported: true, .. }) => {},
-            Some(var) => {
-                var.exported = true;
-                unsafe {
-                    std::env::set_var(name, var.value.clone());
-                }
-            },
-            None => {
-                self.vars.insert(name.to_string(), ShellVariable {
-                    value: String::new(),
-                    exported: true,
-                });
-                unsafe {
-                    std::env::set_var(name, String::new());
-                }
-            }
-        }
-    }
-
-    pub fn unset_var(&mut self, name: &str) {
-        self.vars.remove(name);
-        unsafe {
-            std::env::remove_var(name);
-        }
-    }
-
-    fn handle_batch_mode(&self) -> ShellStatus {
+impl App {
+    fn handle_batch_mode() -> AppStatus {
         let mut input_lines = Vec::new();
 
         for line in io::stdin().lines() {
             match line {
                 Ok(text) => input_lines.push(text),
-                Err(e) => { return ShellStatus::fail(e); }
+                Err(e) => { return AppStatus::fail(e); }
             }
         }
-        ShellStatus::ok()
+        AppStatus::ok()
     }
 
-    fn handle_fallback_mode(&self) -> ShellStatus {
-        ShellStatus::ok()
+    fn handle_fallback_mode() -> AppStatus {
+        AppStatus::ok()
     }
 
-    fn handle_interactive_mode(&self, reader: &mut InputReader) -> ShellStatus {
+    fn handle_interactive_mode(reader: &mut InputReader) -> AppStatus {
         let mut stdout = io::stdout();
 
         macro_rules! draw_prompt {
             ($key:expr, $stdout:expr) => {{
-                let prompt = self.get_var($key);
-                if $stdout.write_all(prompt.as_bytes()).is_err() {
-                    return ShellStatus::fail("failed to write to stdout");
+                match crate::ENV.read() {
+                    Ok(shell) => {
+                        let prompt = shell.get_var($key).unwrap_or_default();
+                        if $stdout.write_all(prompt.as_bytes()).is_err() {
+                            return AppStatus::fail("failed to write to stdout");
+                        }
+                    },
+                    Err(e) => { return AppStatus::fail(e); },
                 }
             }}
         }
@@ -188,13 +56,13 @@ impl Shell {
         macro_rules! flush {
             ($stdout:expr) => {{
                 if $stdout.flush().is_err() {
-                    return ShellStatus::fail("failed to flush stdout");
+                    return AppStatus::fail("failed to flush stdout");
                 }
             }}
         }
 
         if reader.enable_raw_mode().is_err() {
-            return self.handle_fallback_mode();
+            return Self::handle_fallback_mode();
         }
 
         let mut buffer = Buffer::new();
@@ -247,7 +115,7 @@ impl Shell {
                     continue;
                 },
                 Some(c) => {
-                    return ShellStatus::fail(
+                    return AppStatus::fail(
                         format!("{:?} is not a valid quote character", c)
                     );
                 },
@@ -276,21 +144,14 @@ impl Shell {
     }
 
     pub fn main() -> impl Termination {
-        let shell = Shell::new();
         match InputReader::new() {
-            Ok(mut reader) => shell.handle_interactive_mode(&mut reader),
-            Err(_) => shell.handle_batch_mode(),
+            Ok(mut reader) => Self::handle_interactive_mode(&mut reader),
+            Err(_) => Self::handle_batch_mode(),
         }
     }
 }
 
-impl PartialEq for Shell {
-    fn eq(&self, other: &Self) -> bool {
-        self.real_pid == other.real_pid
-    }
-}
-
-impl ShellStatus {
+impl AppStatus {
     pub fn code(code: i32) -> Self {
         Self { msg: String::new(), code }
     }
@@ -300,9 +161,9 @@ impl ShellStatus {
     }
 }
 
-impl Debug for ShellStatus {
+impl Debug for AppStatus {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let mut formatter = f.debug_struct("ShellStatus");
+        let mut formatter = f.debug_struct("AppStatus");
         if !self.msg.is_empty() {
             formatter.field("msg", &self.msg);
         }
@@ -310,7 +171,7 @@ impl Debug for ShellStatus {
     }
 }
 
-impl Display for ShellStatus {
+impl Display for AppStatus {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         if self.code == 0 {
             write!(f, "ok")
@@ -320,31 +181,31 @@ impl Display for ShellStatus {
     }
 }
 
-impl<T: ToString> Fail<T> for ShellStatus {
+impl<T: ToString> Fail<T> for AppStatus {
     fn fail(msg: T) -> Self {
         Self { msg: msg.to_string(), code: 1 }
     }
 }
 
-impl From<()> for ShellStatus {
+impl From<()> for AppStatus {
     fn from(_: ()) -> Self {
         Self::ok()
     }
 }
 
-impl From<i32> for ShellStatus {
+impl From<i32> for AppStatus {
     fn from(code: i32) -> Self {
         Self::code(code)
     }
 }
 
-impl From<u8> for ShellStatus {
+impl From<u8> for AppStatus {
     fn from(code: u8) -> Self {
         Self::code(code as i32)
     }
 }
 
-impl<E: ToString> From<Result<(), E>> for ShellStatus {
+impl<E: ToString> From<Result<(), E>> for AppStatus {
     fn from(res: Result<(), E>) -> Self {
         match res {
             Ok(_) => Self::ok(),
@@ -353,17 +214,17 @@ impl<E: ToString> From<Result<(), E>> for ShellStatus {
     }
 }
 
-impl From<ExitStatus> for ShellStatus {
+impl From<ExitStatus> for AppStatus {
     fn from(status: ExitStatus) -> Self {
         match (status.code(), status.signal()) {
-            (Some(code), None) => ShellStatus::code(code),
-            (None, Some(signal)) => ShellStatus::code(signal),
-            _ => ShellStatus::fail("Cannot retrieve process status"),
+            (Some(code), None) => AppStatus::code(code),
+            (None, Some(signal)) => AppStatus::code(signal),
+            _ => AppStatus::fail("Cannot retrieve process status"),
         }
     }
 }
 
-impl Termination for ShellStatus {
+impl Termination for AppStatus {
     fn report(self) -> ExitCode {
         if !self.msg.is_empty() {
             eprintln!("{}", self.msg);

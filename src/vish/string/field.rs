@@ -1,5 +1,4 @@
-#[cfg(not(test))]
-use std::env::var as get_var;
+use crate::shell::ShellVarError;
 
 /// Represents different types of shell fields, which may undergo various forms of expansion.
 #[derive(Debug, PartialEq)]
@@ -28,6 +27,14 @@ pub enum Field<T> {
 
     /// A special parameter, such as `$@`, `$*`, `$#`, `$?`, `$-`, `$$`, `$!`, or `$0`.
     Special(char),
+}
+
+#[cfg(not(test))]
+fn get_var(name: &str) -> Result<String, ShellVarError> {
+    match crate::ENV.read() {
+        Ok(shell) => shell.get_var(name),
+        Err(_) => Err(ShellVarError::NotPresent),
+    }
 }
 
 fn is_valid_parameter(par: &str) -> bool {
@@ -195,27 +202,22 @@ impl Field<String> {
 }
 
 #[cfg(test)]
-use std::env::VarError;
-
-#[cfg(test)]
-fn get_var(name: &str) -> Result<String, VarError> {
+fn get_var(name: &str) -> Result<String, ShellVarError> {
     match name {
         "HOME" => Ok("/home/gustav".to_string()),
         "USER" => Ok("gustav".to_string()),
-        _ => Err(VarError::NotPresent),
+        _ => Err(ShellVarError::NotPresent),
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::app::Shell;
 
     #[test]
     fn should_pass() {
-        let shell = Shell::new();
         assert_eq!(
-            Field::new(shell, String::from("$HOME")),
+            Field::new(String::from("$HOME")),
             Field::Parameter(String::from("HOME")),
         );
     }
