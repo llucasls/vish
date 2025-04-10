@@ -134,6 +134,7 @@ impl App {
                 "true" => 0,
                 "false" => 1,
                 "export" => cmd::export(argv),
+                "readonly" => cmd::readonly(argv),
                 _ => cmd::run_command(argv),
             };
 
