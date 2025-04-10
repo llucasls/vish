@@ -23,7 +23,7 @@ macro_rules! move_cursor {
 #[macro_export]
 macro_rules! reprint_line {
     ($stdout:expr, $data_list:expr) => {{
-        let ps1 = match crate::ENV.read() {
+        let ps1 = match $crate::ENV.read() {
             Ok(shell) => shell.get_var("PS1").unwrap_or(String::new()),
             Err(_) => String::new(),
         };
