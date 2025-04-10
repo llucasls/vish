@@ -10,7 +10,6 @@ use std::path::PathBuf;
 use super::buffer::Buffer;
 use super::io::InputReader;
 
-
 pub type ArgV = Vec<String>;
 pub enum ShellCommand {
     SpBuiltin(String),
@@ -199,6 +198,29 @@ pub fn exec(argv: ArgV, reader: &mut InputReader) -> u8 {
             eprintln!("vish: Cannot execute command");
             1
         },
+    }
+}
+
+pub fn export(argv: ArgV) -> u8 {
+    match crate::ENV.write() {
+        Ok(mut shell) => {
+            for arg in &argv[1..] {
+                let parts = arg.split('=').collect::<Vec<&str>>();
+                if parts.len() == 1 {
+                    let name = parts[0];
+                    shell.export_var(name);
+                } else if parts.len() == 2 {
+                    let name = parts[0];
+                    let value = parts[1];
+                    shell.export_var(name);
+                    if shell.set_var(name, value).is_err() {
+                        return 1;
+                    }
+                }
+            }
+            0
+        }
+        Err(_) => 1,
     }
 }
 
