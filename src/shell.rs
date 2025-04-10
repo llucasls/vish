@@ -132,7 +132,10 @@ pub enum ShellVarError {
     NotPresent,
     NotUnicode(OsString),
     NotWritable(String),
+    NoReadOnly(String),
 }
+
+pub type ShVarResult<T> = Result<T, ShellVarError>;
 
 impl Shell {
     pub fn new() -> Self {
@@ -180,15 +183,14 @@ impl Shell {
         }
     }
 
-    pub fn get_var(&self, name: &str) -> Result<String, ShellVarError> {
+    pub fn get_var(&self, name: &str) -> ShVarResult<String> {
         match self.vars.get(name) {
             Some(var) => Ok(var.value.clone()),
             None => Err(ShellVarError::NotPresent),
         }
     }
 
-    pub fn set_var(&mut self, name: &str, value: &str) ->
-        Result<(), ShellVarError> {
+    pub fn set_var(&mut self, name: &str, value: &str) -> ShVarResult<()> {
         if std::str::from_utf8(name.as_bytes()).is_err() {
             return Err(ShellVarError::NotUnicode(OsString::from(name)));
         } else if std::str::from_utf8(name.as_bytes()).is_err() {
@@ -218,11 +220,19 @@ impl Shell {
         Ok(())
     }
 
-    pub fn unset_var(&mut self, name: &str) {
+    pub fn unset_var(&mut self, name: &str) -> ShVarResult<()> {
+        if let Some(var) = self.vars.get(name) {
+            if var.readonly {
+                return Err(ShellVarError::NotWritable(name.to_string()));
+            }
+        }
+
         self.vars.remove(name);
         unsafe {
             std::env::remove_var(name);
-        }
+        };
+
+        Ok(())
     }
 
     pub fn export_var(&mut self, name: &str) {
@@ -247,9 +257,28 @@ impl Shell {
         }
     }
 
-    pub fn unexport_var(&mut self, _name: &str) {}
+    pub fn unexport_var(&mut self, name: &str) {
+        if let Some(var) = self.vars.get_mut(name) {
+            var.exported = false;
+        }
+    }
 
-    pub fn freeze_var(&mut self, _name: &str) {}
+    pub fn freeze_var(&mut self, name: &str) -> ShVarResult<()> {
+        if name == "PWD" || name == "OLDPWD" {
+            return Err(ShellVarError::NoReadOnly(name.to_string()));
+        }
+        match self.vars.get_mut(name) {
+            Some(var) => { var.readonly = true; },
+            None => {
+                self.vars.insert(name.to_string(), ShellVariable {
+                    value: String::new(),
+                    exported: false,
+                    readonly: true,
+                });
+            }
+        }
+        Ok(())
+    }
 
     /// Return hard-coded defaults for unset parameters.
     fn init_vars() -> [(&'static str, String); 8] {
@@ -347,6 +376,9 @@ impl fmt::Display for ShellVarError {
                 write!(f, "value {:?} is not valid unicode", s),
             ShellVarError::NotWritable(n) =>
                 write!(f, "shell variable {:?} is read-only", n),
+            ShellVarError::NoReadOnly(n) => write!(
+                f, "shell variable {:?} cannot be marked as read-only", n
+            ),
         }
     }
 }
