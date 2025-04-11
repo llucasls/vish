@@ -251,6 +251,25 @@ pub fn readonly(argv: ArgV) -> u8 {
     }
 }
 
+pub fn set_var(argv: ArgV) -> u8 {
+    match crate::ENV.write() {
+        Ok(mut shell) => {
+            for arg in &argv[0..] {
+                let parts = arg.split('=').collect::<Vec<&str>>();
+                if parts.len() == 2 {
+                    let name = parts[0];
+                    let value = parts[1];
+                    if shell.set_var(name, value).is_err() {
+                        return 1;
+                    }
+                }
+            }
+            0
+        }
+        Err(_) => 1
+    }
+}
+
 fn replace_escape_sequence(input: &[u8]) -> Vec<u8> {
     let hex_seq = br"\x1b";
     let oct_seq = br"\033";

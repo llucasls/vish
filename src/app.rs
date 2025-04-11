@@ -125,6 +125,9 @@ impl App {
             println!();
 
             last_cmd_code = match argv[0].as_str() {
+                input if input.split('=').collect::<Vec<&str>>().len() == 2 => {
+                    cmd::set_var(argv)
+                },
                 "cd" => cmd::cd(argv),
                 "pwd" => cmd::pwd(argv),
                 "printf" => cmd::printf(argv),
