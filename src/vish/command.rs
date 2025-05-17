@@ -10,6 +10,8 @@ use std::path::PathBuf;
 use super::buffer::Buffer;
 use super::io::InputReader;
 
+use crate::shell::ShellVarError;
+
 pub type ArgV = Vec<String>;
 pub enum ShellCommand {
     SpBuiltin(String),
@@ -248,6 +250,32 @@ pub fn readonly(argv: ArgV) -> u8 {
             0
         }
         Err(_) => 1
+    }
+}
+
+pub fn unset(argv: ArgV) -> u8 {
+    let mut status: u8 = 0;
+    match crate::ENV.write() {
+        Ok(mut shell) => {
+            for arg in &argv[1..] {
+                match shell.unset_var(arg) {
+                    Ok(()) => {},
+                    Err(ShellVarError::NotWritable(name)) => {
+                        eprintln!(
+                            "vish: unset: cannot unset readonly variable {}",
+                            name
+                        );
+                        status = 1;
+                    },
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        status = 1;
+                    },
+                }
+            }
+            status
+        },
+        Err(_) => 1,
     }
 }
 

@@ -138,6 +138,7 @@ impl App {
                 "false" => 1,
                 "export" => cmd::export(argv),
                 "readonly" => cmd::readonly(argv),
+                "unset" => cmd::unset(argv),
                 _ => cmd::run_command(argv),
             };
 
