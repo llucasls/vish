@@ -42,14 +42,14 @@ Unspecified utilities may or may not be implemented.
 - [ ] eval
 - [x] exec
 - [x] exit
-- [ ] export
-- [ ] readonly
+- [x] export
+- [x] readonly
 - [ ] return
 - [ ] set
 - [ ] shift
 - [ ] times
 - [ ] trap
-- [ ] unset
+- [x] unset
 
 ## Built-In Utilities
 - [ ] alias
