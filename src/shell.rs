@@ -204,9 +204,7 @@ impl Shell {
                 }
                 var.value = value.to_string();
                 if var.exported {
-                    unsafe {
-                        std::env::set_var(name, value);
-                    }
+                    std::env::set_var(name, value);
                 }
             },
             None => {
@@ -228,9 +226,7 @@ impl Shell {
         }
 
         self.vars.remove(name);
-        unsafe {
-            std::env::remove_var(name);
-        };
+        std::env::remove_var(name);
 
         Ok(())
     }
@@ -240,9 +236,7 @@ impl Shell {
             Some(ShellVariable { exported: true, .. }) => {},
             Some(var) => {
                 var.exported = true;
-                unsafe {
-                    std::env::set_var(name, var.value.clone());
-                }
+                std::env::set_var(name, var.value.clone());
             },
             None => {
                 self.vars.insert(name.to_string(), ShellVariable {
@@ -250,9 +244,7 @@ impl Shell {
                     exported: true,
                     readonly: false,
                 });
-                unsafe {
-                    std::env::set_var(name, String::new());
-                }
+                std::env::set_var(name, String::new());
             }
         }
     }
