@@ -131,24 +131,6 @@ macro_rules! move_right {
     }}
 }
 
-macro_rules! store_character {
-    ($b:expr, $i:expr, $inner_vec:expr, $outer_vec:expr, $stdout:expr) => {{
-        $inner_vec.push($b);
-        if $i < $outer_vec.len() {
-            $outer_vec.insert($i, $inner_vec.clone());
-            reprint_line!($stdout, &$outer_vec);
-            move_cursor!(1, $stdout);
-            $stdout.flush()?;
-        } else {
-            $outer_vec.push($inner_vec.clone());
-            $stdout.write_all($inner_vec.as_slice())?;
-            $stdout.flush()?;
-        }
-        $i += 1;
-        $inner_vec.clear();
-    }}
-}
-
 pub struct InputReader {
     termios: Termios,
     default: Termios,
@@ -236,23 +218,43 @@ impl InputReader {
                 },
                 NEWLINE => { break; },
                 b if b < 0x20 => { continue; },
-                _ if std::str::from_utf8(inner_vector.as_slice()).is_err() => {
+                _ => {
                     inner_vector.push(byte);
-                    continue;
-                },
-                _ => store_character!(
-                    byte, index, inner_vector, outer_vector, self.stdout
-                ),
+                    if std::str::from_utf8(inner_vector.as_slice()).is_ok() {
+                        if index < outer_vector.len() {
+                            outer_vector.insert(index, inner_vector.clone());
+                            reprint_line!(self.stdout, &outer_vector);
+                            move_cursor!(1, self.stdout);
+                        } else {
+                            outer_vector.push(inner_vector.clone());
+                            self.stdout.write_all(inner_vector.as_slice())?;
+                        }
+                        self.stdout.flush()?;
+                        index += 1;
+                        inner_vector.clear();
+                    } else {
+                        continue;
+                    }
+                }
             }
         }
 
         for vec in outer_vector {
-            for byte in vec {
-                buffer.write(&[byte])?;
+            if let Ok(s) = std::str::from_utf8(&vec) {
+                buffer.write(s.as_bytes())?;
             }
         }
 
         Ok(Some(()))
+    }
+}
+
+impl Drop for InputReader {
+    fn drop(&mut self) {
+        match self.disable_raw_mode() {
+            Ok(_) => {},
+            Err(e) => { panic!("failed to cleanup terminal: {:?}", e); },
+        }
     }
 }
 

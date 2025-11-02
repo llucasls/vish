@@ -97,7 +97,13 @@ impl App {
 
             let (argv, quote_char) = match buffer.as_str() {
                 Ok(text) => parse_argv(text),
-                Err(e) => { return Err(e).into(); },
+                Err(e) => {
+                    should_clear_buffer = true;
+                    println!();
+                    eprintln!("{}", e);
+                    last_cmd_code = 2;
+                    continue;
+                },
             };
 
             if argv.is_empty() {
@@ -148,10 +154,7 @@ impl App {
             }
         };
 
-        match reader.disable_raw_mode() {
-            Ok(_) => exit_code.into(),
-            Err(e) => Err(e).into(),
-        }
+        exit_code.into()
     }
 
     pub fn main() -> impl Termination {
