@@ -93,11 +93,6 @@ impl Buffer {
         self.cursor.position()
     }
 
-    /// Read bytes from buffer and place them into byte array
-    pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.cursor.read(buf)
-    }
-
     /// Update the cursor position while respecting boundaries
     pub fn safe_seek(&mut self, pos: SeekFrom) -> u64 {
         let current_pos = self.cursor.position();
@@ -128,11 +123,6 @@ impl Buffer {
         self.cursor.set_position(pos);
     }
 
-    /// Write bytes from byte array into buffer
-    pub fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.cursor.write(buf)
-    }
-
     /// Return byte vector content as string
     pub fn as_string(&self) -> Result<String, FromUtf8Error> {
         String::from_utf8(self.get_ref().to_vec())
@@ -150,6 +140,22 @@ impl fmt::Debug for Buffer {
             .field("inner", &self.cursor.get_ref())
             .field("pos", &self.cursor.position())
             .finish()
+    }
+}
+
+impl Read for Buffer {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.cursor.read(buf)
+    }
+}
+
+impl Write for Buffer {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.cursor.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.cursor.flush()
     }
 }
 
