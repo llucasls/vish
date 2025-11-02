@@ -216,6 +216,15 @@ impl From<u8> for AppStatus {
     }
 }
 
+impl<T: Into<AppStatus>> From<Option<T>> for AppStatus {
+    fn from(status: Option<T>) -> Self {
+        match status {
+            Some(value) => value.into(),
+            None => Self::code(1),
+        }
+    }
+}
+
 impl<E: ToString> From<Result<(), E>> for AppStatus {
     fn from(res: Result<(), E>) -> Self {
         match res {
@@ -229,7 +238,7 @@ impl From<ExitStatus> for AppStatus {
     fn from(status: ExitStatus) -> Self {
         match (status.code(), status.signal()) {
             (Some(code), None) => AppStatus::code(code),
-            (None, Some(signal)) => AppStatus::code(signal),
+            (None, Some(signal)) => AppStatus::code(signal + 128),
             _ => AppStatus::fail("Cannot retrieve process status"),
         }
     }
