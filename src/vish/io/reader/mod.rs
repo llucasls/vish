@@ -251,9 +251,8 @@ impl InputReader {
 
 impl Drop for InputReader {
     fn drop(&mut self) {
-        match self.disable_raw_mode() {
-            Ok(_) => {},
-            Err(e) => { panic!("failed to cleanup terminal: {:?}", e); },
+        if let Err(e) = self.disable_raw_mode() {
+            eprintln!("vish: failed to cleanup terminal: {:?}", e);
         }
     }
 }
