@@ -249,6 +249,17 @@ impl InputReader {
     }
 }
 
+impl Clone for InputReader {
+    fn clone(&self) -> Self {
+        Self {
+            termios: self.termios,
+            default: self.default,
+            stdin: io::stdin(),
+            stdout: io::stdout(),
+        }
+    }
+}
+
 impl Drop for InputReader {
     fn drop(&mut self) {
         if let Err(e) = self.disable_raw_mode() {

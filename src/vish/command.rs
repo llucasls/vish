@@ -171,16 +171,25 @@ pub fn exec(argv: ArgV, reader: &mut InputReader) -> u8 {
     if argv.len() < 2 {
         eprintln!("vish: exec: no command passed to exec");
         return 1;
-    } else if reader.disable_raw_mode().is_err() {
-        eprintln!("vish: exec: failed to cleanup environment...");
-        return 1;
     }
 
-    let err = Command::new(argv[1].clone())
-        .args(&argv[2..])
-        .exec();
-    if reader.enable_raw_mode().is_err() {
-        eprintln!("warning: failed to reactivate raw mode");
+    let cmd = &argv[1];
+    let args = &argv[2..];
+
+    let err = unsafe {
+        Command::new(cmd)
+            .args(args)
+            .pre_exec({
+                let reader = reader.clone();
+                move || {
+                    reader.disable_raw_mode()
+                }
+            })
+            .exec()
+    };
+
+    if let Err(e) = reader.enable_raw_mode() {
+        eprintln!("warning: failed to reactivate raw mode: {}", e);
     }
 
     match err.kind() {
