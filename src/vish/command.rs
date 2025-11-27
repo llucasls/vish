@@ -1,3 +1,4 @@
+use std::fs;
 use std::process::Command;
 use std::os::unix::process::CommandExt;
 use std::io::ErrorKind::{NotFound, PermissionDenied, InvalidInput};
@@ -260,6 +261,63 @@ pub fn readonly(argv: ArgV) -> u8 {
         }
         Err(_) => 1
     }
+}
+
+// possible types: shell built-in, function, alias, keyword or executable
+pub fn r#type(argv: ArgV) -> u8 {
+    let mut status = 0;
+    let builtin = |name: &str| { println!("{} is a shell builtin", name); };
+    let keyword = |name: &str| { println!("{} is a shell keyword", name); };
+    // let function = |name: &str| { println!("{} is a function", name); };
+    // let alias = |name: &str| { println!("{} is an alias", name); };
+    let not_found = |name: &str| { eprintln!("{}: not found", name); };
+    for arg in &argv[1..] {
+        match arg.as_str() {
+            "cd" => builtin("cd"),
+            "pwd" => builtin("pwd"),
+            "printf" => builtin("printf"),
+            "echo" => builtin("echo"),
+            "exec" => builtin("exec"),
+            "exit" => builtin("exit"),
+            "true" => builtin("true"),
+            "false" => builtin("false"),
+            "type" => builtin("type"),
+            "export" => builtin("export"),
+            "readonly" => builtin("readonly"),
+            "unset" => builtin("unset"),
+            "test" => builtin("test"),
+            "if" => keyword("if"),
+            "then" => keyword("then"),
+            "elif" => keyword("elif"),
+            "else" => keyword("else"),
+            "fi" => keyword("fi"),
+            "[" => builtin("["),
+            "{" => keyword("{"),
+            "}" => keyword("}"),
+            _ => {
+                // TODO: implement alias and function command types
+                if let Ok(path) = env::var("PATH") {
+                    let mut is_found: bool = false;
+                    for dir in path.split(':') {
+                        let executable = format!("{}/{}", dir, arg);
+                        if fs::exists(&executable).ok() == Some(true) {
+                            println!("{} is {}", arg, executable);
+                            is_found = true;
+                            break;
+                        }
+                    }
+                    if !is_found {
+                        status = 127;
+                        not_found(arg);
+                    }
+                } else {
+                    status = 127;
+                    not_found(arg);
+                }
+            }
+        }
+    }
+    status
 }
 
 pub fn unset(argv: ArgV) -> u8 {

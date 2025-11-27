@@ -142,6 +142,7 @@ impl App {
                 "exit" => { break cmd::exit(argv, last_cmd_code); },
                 "true" => 0,
                 "false" => 1,
+                "type" => cmd::r#type(argv),
                 "export" => cmd::export(argv),
                 "readonly" => cmd::readonly(argv),
                 "unset" => cmd::unset(argv),
