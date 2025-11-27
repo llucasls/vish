@@ -1,6 +1,10 @@
 #[cfg(not(test))]
 use std::env::var as get_var;
 
+#[cfg(test)]
+use std::env::VarError;
+
+
 pub fn expand_parameter(input: String) -> String {
     let dollar_index = input.find('$');
     if dollar_index.is_none() {
@@ -53,12 +57,13 @@ use std::collections::HashMap;
 #[cfg(test)]
 fn get_var(name: &str) -> Result<String, std::env::VarError> {
     let mut table = HashMap::new();
+    let err = VarError::NotPresent;
     let path = "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin";
     table.insert("HOME", String::from("/home/bob"));
     table.insert("PATH", String::from(path));
     table.insert("PAT", String::from("Patricia"));
     table.insert("PATH1", String::from("/bin"));
-    Ok(table.get(name).unwrap().clone())
+    table.get(name).ok_or(err).cloned()
 }
 
 #[cfg(test)]
