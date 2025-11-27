@@ -38,6 +38,13 @@ impl Buffer {
         }
     }
 
+    pub fn bytes(&self) -> std::str::Bytes<'_> {
+        match self.as_str() {
+            Ok(text) => text.bytes(),
+            Err(_) => "".bytes(),
+        }
+    }
+
     /// Remove all values
     pub fn clear(&mut self) {
         self.get_mut().clear();
