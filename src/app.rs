@@ -15,7 +15,7 @@ pub struct AppStatus {
     code: i32,
 }
 
-trait Fail<T> {
+pub trait Fail<T> {
     fn fail(msg: T) -> Self;
 }
 
