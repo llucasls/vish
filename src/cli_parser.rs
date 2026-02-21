@@ -131,20 +131,20 @@ pub trait CliReadConfigs<T> {
 
 fn get_opt_value(arg: &str) -> CliArg {
     if arg == "--" {
-        CliArg::Operator
+        CliArg::Operand
     } else if let Some(stripped) = arg.strip_prefix("--") {
         let mut parts = stripped.splitn(2, '=');
         let name = parts.next().unwrap_or_default().to_string();
         let value = parts.next().map(|v| v.to_string());
         if name.is_empty() {
-            CliArg::Operator
+            CliArg::Operand
         } else {
             CliArg::Long { name, value }
         }
     } else if let Some(flags) = arg.strip_prefix('-') {
         CliArg::Short { flags: flags.to_string() }
     } else {
-        CliArg::Operator
+        CliArg::Operand
     }
 }
 
@@ -226,7 +226,7 @@ enum CliArg {
     Short { flags: String },
 
     /// A positional argument
-    Operator,
+    Operand,
 }
 
 pub struct CliParser {
@@ -294,7 +294,7 @@ impl CliParser {
                     let value = self.parse_long_option(&name, value)?;
                     insert_value!(self.options, name, value);
                 },
-                CliArg::Operator => {
+                CliArg::Operand => {
                     self.operators.push(arg);
                 },
             }
