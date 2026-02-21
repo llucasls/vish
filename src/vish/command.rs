@@ -1,4 +1,5 @@
 use std::fs;
+use std::io;
 use std::process::Command;
 use std::os::unix::process::CommandExt;
 use std::io::ErrorKind::{NotFound, PermissionDenied, InvalidInput};
@@ -7,6 +8,8 @@ use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fmt::format;
 use std::path::PathBuf;
+
+use libc::{self, pid_t};
 
 use super::buffer::Buffer;
 use super::io::InputReader;
@@ -22,6 +25,188 @@ pub enum ShellCommand {
     Process(String),
     Script(String),
     Variable(String, String),
+}
+
+pub struct Fork {
+    action: Option<Box<dyn FnOnce() -> i32>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ForkedProcess {
+    pid: pid_t,
+    was_killed: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct WaitStatus {
+    raw_status: i32,
+}
+
+impl Fork {
+    pub fn new() -> Self {
+        Self {
+            action: None,
+        }
+    }
+
+    /// This method receives a closure with actions to be executed
+    /// in the context of the child process. The return value will
+    /// be used as the exit code for the `_exit()` function.
+    ///
+    /// # Safety
+    /// If the process is multithreaded, the closure must not call
+    /// non-async-signal-safe functions.
+    pub fn procedure<F>(mut self, f: F) -> Self
+        where F: FnOnce() -> i32 + 'static,
+    {
+        let action: Box<dyn FnOnce() -> i32> = Box::new(f);
+        self.action = Some(action);
+        self
+    }
+
+    pub fn spawn(self) -> io::Result<ForkedProcess> {
+        match unsafe { libc::fork() } {
+            -1 => Err(io::Error::last_os_error()),
+            0 => {
+                let code: i32 = match self.action {
+                    Some(action) => {
+                        action()
+                    },
+                    None => 0,
+                };
+                unsafe { libc::_exit(code) };
+            },
+            pid => Ok(ForkedProcess { pid, was_killed: false }),
+        }
+    }
+}
+
+impl ForkedProcess {
+    pub fn id(&self) -> pid_t {
+        self.pid
+    }
+
+    pub fn kill(&mut self) -> io::Result<()> {
+        if self.was_killed {
+            return Ok(());
+        }
+
+        match unsafe { libc::kill(self.pid, libc::SIGKILL) } {
+            -1 => Err(io::Error::last_os_error()),
+            _ => {
+                self.was_killed = true;
+                Ok(())
+            }
+        }
+    }
+
+    pub fn send_signal(&self, signal: i32) -> io::Result<()> {
+        match unsafe { libc::kill(self.pid, signal) } {
+            -1 => Err(io::Error::last_os_error()),
+            _ => Ok(()),
+        }
+    }
+
+    pub fn wait(&self) -> io::Result<WaitStatus> {
+        let mut raw_status: i32 = 0;
+        let options: i32 =
+            libc::WUNTRACED |
+            libc::WCONTINUED;
+
+        match unsafe {
+            libc::waitpid(self.pid, &mut raw_status, options)
+        } {
+            -1 => Err(io::Error::last_os_error()),
+            _ => Ok(WaitStatus { raw_status }),
+        }
+    }
+
+    /// Returns `WaitStatus` of the child if it has already exited.
+    ///
+    /// This method doesn't block the calling thread and works like
+    /// `ExitStatus` from the standard library.
+    ///
+    /// If the child has exited, then Ok(Some(status)) is returned.
+    /// If the exit status is not available at this time then Ok(None)
+    /// is returned. If an error occurs, then that error is returned.
+    pub fn try_wait(&mut self) -> io::Result<Option<WaitStatus>> {
+        let mut raw_status: i32 = 0;
+        let options: i32 =
+            libc::WNOHANG |
+            libc::WUNTRACED |
+            libc::WCONTINUED;
+
+        match unsafe {
+            libc::waitpid(self.pid, &mut raw_status, options)
+        } {
+            -1 => Err(io::Error::last_os_error()),
+            0 => Ok(None),
+            _ => Ok(Some(WaitStatus { raw_status })),
+        }
+    }
+}
+
+impl WaitStatus {
+    /// Creates a new WaitStatus from raw wait status number.
+    pub fn from_raw(raw_status: i32) -> Self {
+        Self { raw_status }
+    }
+
+    /// Returns true if process exited with status `0`.
+    pub fn success(&self) -> bool {
+        if libc::WIFEXITED(self.raw_status) {
+            libc::WEXITSTATUS(self.raw_status) == 0
+        } else {
+            false
+        }
+    }
+
+    /// Returns the exit code of the process, if any.
+    pub fn code(&self) -> Option<i32> {
+        if libc::WIFEXITED(self.raw_status) {
+            Some(libc::WEXITSTATUS(self.raw_status))
+        } else {
+            None
+        }
+    }
+
+    /// If the process was terminated by a signal, returns that signal.
+    pub fn signal(&self) -> Option<i32> {
+        if libc::WIFSIGNALED(self.raw_status) {
+            Some(libc::WTERMSIG(self.raw_status))
+        } else {
+            None
+        }
+    }
+
+    /// If the process was terminated by a signal,
+    /// says whether it dumped core.
+    pub fn core_dumped(&self) -> bool {
+        if libc::WIFSIGNALED(self.raw_status) {
+            libc::WCOREDUMP(self.raw_status)
+        } else {
+            false
+        }
+    }
+
+    /// If the process was stopped by a signal, returns that signal.
+    pub fn stopped_signal(&self) -> Option<i32> {
+        if libc::WIFSTOPPED(self.raw_status) {
+            Some(libc::WSTOPSIG(self.raw_status))
+        } else {
+            None
+        }
+    }
+
+    /// Whether the process was continued from a stopped status.
+    pub fn continued(&self) -> bool {
+        libc::WIFCONTINUED(self.raw_status)
+    }
+
+    /// Returns the underlying raw wait status as an integer.
+    pub fn into_raw(self) -> i32 {
+        self.raw_status
+    }
 }
 
 macro_rules! error_msg {
