@@ -214,11 +214,16 @@ macro_rules! error_msg {
 }
 
 pub fn run_command(argv: ArgV) -> u8 {
-    let size = argv.len();
-    let mut command = Command::new(argv[0].clone());
-    if size > 1 {
-        command.args(argv[1..].to_vec());
+    let mut iter = argv.iter();
+    let Some(arg0) = iter.next() else {
+        eprintln!("no command was provided");
+        return 1;
+    };
+    let mut command = Command::new(arg0);
+    while let Some(arg) = iter.next() {
+        command.arg(arg);
     }
+    command.process_group(0);
     match command.status() {
         Ok(status) => status.code().unwrap_or(1) as u8,
         Err(_) => 1,
