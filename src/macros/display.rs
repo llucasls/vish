@@ -1,7 +1,12 @@
 #[macro_export]
 macro_rules! kill_line {
     ($stdout:expr) => {{
+        let ps1 = match $crate::ENV.read() {
+            Ok(shell) => shell.get_var("PS1").unwrap_or(String::new()),
+            Err(_) => String::new(),
+        };
         $stdout.write_all(b"\x1b[2K\r")?;
+        $stdout.write_all(ps1.as_bytes())?;
     }};
 }
 
@@ -27,12 +32,11 @@ macro_rules! reprint_line {
             Ok(shell) => shell.get_var("PS1").unwrap_or(String::new()),
             Err(_) => String::new(),
         };
-        $stdout.write_all(b"\x1b[s")?;
-        kill_line!($stdout);
+        $stdout.write_all(b"\x1b[2K\r")?;
         $stdout.write_all(ps1.as_bytes())?;
         for utf8_char in $data_list.iter() {
             $stdout.write_all(utf8_char.as_slice())?;
         }
-        $stdout.write_all(b"\x1b[u")?;
+        $stdout.flush()?;
     }};
 }
