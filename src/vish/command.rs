@@ -81,6 +81,12 @@ impl Fork {
     }
 }
 
+impl Default for Fork {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ForkedProcess {
     pub fn id(&self) -> pid_t {
         self.pid
