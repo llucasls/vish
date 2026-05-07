@@ -16,12 +16,6 @@ impl Buffer {
         Self { cursor }
     }
 
-    /// Create buffer from byte vector
-    pub fn from(data: Vec<u8>) -> Self {
-        let cursor = Cursor::new(data);
-        Self { cursor }
-    }
-
     /// Create buffer from string slice
     pub fn from_utf8(text: &str) -> Self {
         let cursor: Cursor<Vec<u8>> = Cursor::new(text.into());
@@ -138,6 +132,20 @@ impl Buffer {
     /// Return byte vector content as string slice
     pub fn as_str(&self) -> Result<&str, Utf8Error> {
         std::str::from_utf8(self.get_ref())
+    }
+}
+
+impl From<Vec<u8>> for Buffer {
+    fn from(data: Vec<u8>) -> Self {
+        let cursor = Cursor::new(data);
+        Self { cursor }
+    }
+}
+
+impl From<&[u8]> for Buffer {
+    fn from(data: &[u8]) -> Self {
+        let cursor = Cursor::new(data.to_vec());
+        Self { cursor }
     }
 }
 
