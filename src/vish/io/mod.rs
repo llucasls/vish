@@ -1,10 +1,9 @@
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Write, Cursor};
 use std::mem::replace;
 
 use termios::*;
 use termios::os::target::{VWERASE, VREPRINT, VLNEXT};
 
-use crate::vish::buffer::Buffer;
 use crate::{kill_line, move_cursor, reprint_line};
 
 const NEWLINE: u8 = b'\n';
@@ -171,7 +170,7 @@ impl Terminal {
 
     pub fn read_input<R, W>(
         &mut self,
-        buffer: &mut Buffer,
+        buffer: &mut Cursor<Vec<u8>>,
         stdin: R,
         stdout: &mut W,
     ) -> io::Result<ReadAction>
@@ -350,7 +349,7 @@ mod test_input_reader {
     #[test]
     fn reads_line_and_echoes() {
         let mut terminal = Terminal::new().unwrap();
-        let mut buffer = Buffer::new();
+        let mut buffer = Cursor::new(Vec::new());
 
         let mut input = Cursor::new(b"echo hello world\n");
         let mut output = Vec::new();
@@ -367,7 +366,7 @@ mod test_input_reader {
     #[test]
     fn move_back_with_arrow() {
         let mut terminal = Terminal::new().unwrap();
-        let mut buffer = Buffer::new();
+        let mut buffer = Cursor::new(Vec::new());
 
         let mut input = Cursor::new(b"echo hello\x1b[D\n");
         let mut output = Vec::new();
@@ -385,7 +384,7 @@ mod test_input_reader {
     #[test]
     fn delete_character_with_ctrl_d() {
         let mut terminal = Terminal::new().unwrap();
-        let mut buffer = Buffer::new();
+        let mut buffer = Cursor::new(Vec::new());
 
         let mut input = Cursor::new(b"ls\x1b[D\x1b[D\x04\n");
         let mut output = Vec::new();

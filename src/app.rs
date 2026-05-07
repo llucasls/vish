@@ -1,9 +1,8 @@
 use std::fmt::{self, Debug, Display, Formatter};
-use std::io::{self, Write};
+use std::io::{self, Write, Cursor};
 use std::process::{ExitCode, ExitStatus, Termination};
 use std::os::unix::process::ExitStatusExt;
 
-use crate::vish::buffer::Buffer;
 use crate::vish::command::{self as cmd};
 use crate::vish::io::{Terminal, ReadAction};
 use crate::vish::string::parse_argv;
@@ -67,14 +66,15 @@ impl App {
             return Self::handle_fallback_mode();
         }
 
-        let mut buffer = Buffer::new();
+        let mut buffer = Cursor::new(Vec::new());
         let mut last_cmd_code: u8 = 0;
         let mut should_clear_buffer = true;
         let exit_code: u8 = loop {
             if should_clear_buffer {
                 draw_prompt!("PS1", stdout);
                 flush!(stdout);
-                buffer.clear();
+                buffer.get_mut().clear();
+                buffer.set_position(0);
             } else {
                 draw_prompt!("PS2", stdout);
                 flush!(stdout);
@@ -97,7 +97,7 @@ impl App {
                 Err(e) => { return Err(e).into(); },
             }
 
-            let (argv, quote_char) = match buffer.as_str() {
+            let (argv, quote_char) = match str::from_utf8(buffer.get_ref()) {
                 Ok(text) => parse_argv(text),
                 Err(e) => {
                     should_clear_buffer = true;

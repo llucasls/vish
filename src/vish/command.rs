@@ -1,5 +1,5 @@
 use std::fs;
-use std::io;
+use std::io::{self, Cursor};
 use std::process::Command;
 use std::os::unix::process::CommandExt;
 use std::io::ErrorKind::{NotFound, PermissionDenied, InvalidInput};
@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use libc::{self, pid_t};
 use termios::{tcsetattr, TCSANOW};
 
-use super::buffer::Buffer;
 use super::io::Terminal;
 
 use crate::shell::ShellVarError;
@@ -341,7 +340,7 @@ pub fn exit(argv: ArgV, exit_code: u8) -> u8 {
 pub fn printf(argv: ArgV) -> u8 {
     if argv.len() > 1 {
         for arg in &argv[1..] {
-            let buf = Buffer::from_utf8(arg);
+            let buf: Cursor<Vec<u8>> = Cursor::new(arg.bytes().collect());
             let parsed_bytes = replace_escape_sequence(buf.get_ref());
             let Ok(new_arg) = String::from_utf8(parsed_bytes) else { todo!() };
             print!("{}", new_arg);
