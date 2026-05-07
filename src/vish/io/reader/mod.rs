@@ -293,6 +293,113 @@ impl Terminal {
     }
 }
 
+#[cfg(test)]
+mod test_input_reader {
+    use super::*;
+    use std::fmt;
+    use std::io::Cursor;
+
+    #[repr(transparent)]
+    #[derive(PartialEq)]
+    struct ByteStr(Vec<u8>);
+
+    impl<B: AsRef<[u8]>> From<B> for ByteStr {
+        fn from(value: B) -> Self {
+            Self(Vec::from(value.as_ref()))
+        }
+    }
+
+    impl fmt::Display for ByteStr {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            for byte in &self.0 {
+                match byte {
+                    b' ' => write!(f, " ")?,
+                    b'\t' => write!(f, r"\t")?,
+                    b'\n' => write!(f, r"\n")?,
+                    b'\r' => write!(f, r"\r")?,
+                    0x0B => write!(f, r"\v")?,
+                    0x0C => write!(f, r"\f")?,
+                    0x1b => write!(f, r"\e")?,
+                    b'\\' => write!(f, r"\\")?,
+                    b'"'  => write!(f, "\\\"")?,
+
+                    0x20..=0x7E => write!(f, "{}", *byte as char)?,
+
+                    _ => write!(f, r"\x{:02x}", *byte)?,
+                };
+            }
+            Ok(())
+        }
+    }
+
+    macro_rules! assert_eq_bytes {
+        ($value:expr, $expected:expr) => {
+            assert_eq!(ByteStr::from($value), ByteStr::from($expected))
+        };
+        ($value:expr, $expected:expr, $msg:expr) => {
+            assert_eq!(ByteStr::from($value), ByteStr::from($expected), $msg)
+        };
+    }
+
+    impl fmt::Debug for ByteStr {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "b\"{}\"", self)
+        }
+    }
+
+    #[test]
+    fn reads_line_and_echoes() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Buffer::new();
+
+        let mut input = Cursor::new(b"echo hello world\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo hello world", "bufer");
+        assert_eq_bytes!(output, b"echo hello world", "output");
+    }
+
+    #[test]
+    fn move_back_with_arrow() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Buffer::new();
+
+        let mut input = Cursor::new(b"echo hello\x1b[D\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo hello", "buffer");
+        // number 1 (byte 49) introduced by move_cursor!
+        assert_eq_bytes!(output, b"echo hello\x1b[1D", "output");
+    }
+
+    #[test]
+    fn delete_character_with_ctrl_d() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Buffer::new();
+
+        let mut input = Cursor::new(b"ls\x1b[D\x1b[D\x04\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"s", "buffer");
+        assert_eq_bytes!(output, b"ls\x1b[1D\x1b[1D\x1b[2K\r$ s", "output");
+    }
+}
+
 impl Drop for Terminal {
     fn drop(&mut self) {
         if let Err(e) = self.disable_raw_mode() {
