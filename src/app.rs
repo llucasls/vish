@@ -5,7 +5,7 @@ use std::os::unix::process::ExitStatusExt;
 
 use crate::vish::buffer::Buffer;
 use crate::vish::command::{self as cmd};
-use crate::vish::io::reader::{Terminal, ReadAction};
+use crate::vish::io::{Terminal, ReadAction};
 use crate::vish::string::parse_argv;
 
 pub struct App;
