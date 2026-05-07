@@ -220,17 +220,14 @@ macro_rules! error_msg {
 }
 
 pub fn run_command(argv: ArgV) -> u8 {
-    let mut iter = argv.iter();
-    let Some(arg0) = iter.next() else {
+    if argv.is_empty() {
         eprintln!("no command was provided");
         return 1;
-    };
-    let mut command = Command::new(arg0);
-    while let Some(arg) = iter.next() {
-        command.arg(arg);
     }
-    command.process_group(0);
-    match command.status() {
+
+    let cmd = &argv[0];
+    let args = &argv[1..];
+    match Command::new(cmd).args(args).process_group(0).status() {
         Ok(status) => status.code().unwrap_or(1) as u8,
         Err(_) => 1,
     }
