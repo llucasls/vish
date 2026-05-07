@@ -4,6 +4,10 @@ pub mod vish;
 #[doc(hidden)]
 pub mod macros;
 pub mod util;
+
+#[cfg(test)]
+pub mod testing;
+
 use std::process::Termination;
 use std::sync::{Arc, LazyLock, RwLock};
 

@@ -13,25 +13,49 @@ const DOWN: u8 = b'B';
 const LEFT: u8 = b'D';
 const RIGHT: u8 = b'C';
 
-fn handle_werase_byte(bytes: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+fn handle_werase_byte(mut bytes: Vec<Vec<u8>>, index: usize) -> Vec<Vec<u8>> {
     if bytes.is_empty() {
         return bytes;
     }
 
-    let is_whitespace = |c: Vec<u8>| c.iter().all(|b| b.is_ascii_whitespace());
-    let mut new_bytes = bytes.clone();
+    // Find UTF-8 char position from byte offset
+    let mut total = 0;
+    let mut pos = bytes.len();
 
-    for utf8_char in bytes.iter().rev() {
-        if !is_whitespace(utf8_char.to_vec()) { break; }
-        new_bytes.pop();
+    for (i, ch) in bytes.iter().enumerate() {
+        total += ch.len();
+
+        if total >= index {
+            pos = i + 1;
+            break;
+        }
     }
 
-    for utf8_char in new_bytes.clone().iter().rev() {
-        if is_whitespace(utf8_char.to_vec()) { break; }
-        new_bytes.pop();
+    pos = pos.min(bytes.len());
+
+    // Skip trailing whitespace
+    let mut start = pos;
+
+    while start > 0
+        && bytes[start - 1]
+            .iter()
+            .all(|b| b.is_ascii_whitespace())
+    {
+        start -= 1;
     }
 
-    new_bytes
+    // Skip previous word
+    while start > 0
+        && !bytes[start - 1]
+            .iter()
+            .all(|b| b.is_ascii_whitespace())
+    {
+        start -= 1;
+    }
+
+    bytes.drain(start..pos);
+
+    bytes
 }
 
 macro_rules! delete_previous_char {
@@ -53,13 +77,18 @@ macro_rules! delete_previous_char {
 macro_rules! delete_previous_word {
     ($index:expr, $vector:expr, $stdout:expr) => {{
         let previous_length = $vector.len();
-        $vector = handle_werase_byte($vector);
+        $vector = handle_werase_byte($vector, $index);
         let resulting_length = $vector.len();
         let diff = previous_length - resulting_length;
         $index -= diff;
-        let mut stdout = io::stdout();
         move_cursor!(-(diff as isize), $stdout);
-        reprint_line!(stdout, $vector);
+        write!($stdout, "\x1b[0K")?;
+        for bytes in &$vector[$index..] {
+            let c = str::from_utf8(bytes).unwrap();
+            write!($stdout, "{}", c)?;
+        }
+        let remaining = $vector.len() - $index;
+        move_cursor!(-(remaining as isize), $stdout);
         $stdout.flush()?;
         continue;
     }}
@@ -206,10 +235,17 @@ impl Terminal {
                     if std::str::from_utf8(inner_vector.as_slice()).is_err() {
                         continue;
                     } else if index < outer_vector.len() {
-                        reprint_line!(stdout, &outer_vector);
-                        move_cursor!(1, stdout);
                         let new_vec = Vec::with_capacity(4);
                         let bytes = replace(&mut inner_vector, new_vec);
+                        write!(stdout, "\x1b[0K")?;
+                        write!(stdout, "{}", str::from_utf8(&bytes).unwrap_or_default())?;
+                        for bytes in &outer_vector[index..] {
+                            let c = str::from_utf8(&bytes).unwrap();
+                            write!(stdout, "{}", c)?;
+                        }
+                        let remaining = index as isize
+                            - outer_vector.len() as isize;
+                        move_cursor!(remaining, stdout);
                         outer_vector.insert(index, bytes);
                     } else {
                         stdout.write_all(inner_vector.as_slice())?;
@@ -314,56 +350,9 @@ impl Drop for Terminal {
 #[cfg(test)]
 mod test_input_reader {
     use super::*;
-    use std::fmt;
     use std::io::Cursor;
-
-    #[repr(transparent)]
-    #[derive(PartialEq)]
-    struct ByteStr(Vec<u8>);
-
-    impl<B: AsRef<[u8]>> From<B> for ByteStr {
-        fn from(value: B) -> Self {
-            Self(Vec::from(value.as_ref()))
-        }
-    }
-
-    impl fmt::Display for ByteStr {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            for byte in &self.0 {
-                match byte {
-                    b' ' => write!(f, " ")?,
-                    b'\t' => write!(f, r"\t")?,
-                    b'\n' => write!(f, r"\n")?,
-                    b'\r' => write!(f, r"\r")?,
-                    0x0B => write!(f, r"\v")?,
-                    0x0C => write!(f, r"\f")?,
-                    0x1b => write!(f, r"\e")?,
-                    b'\\' => write!(f, r"\\")?,
-                    b'"'  => write!(f, "\\\"")?,
-
-                    0x20..=0x7E => write!(f, "{}", *byte as char)?,
-
-                    _ => write!(f, r"\x{:02x}", *byte)?,
-                };
-            }
-            Ok(())
-        }
-    }
-
-    macro_rules! assert_eq_bytes {
-        ($value:expr, $expected:expr) => {
-            assert_eq!(ByteStr::from($value), ByteStr::from($expected))
-        };
-        ($value:expr, $expected:expr, $msg:expr) => {
-            assert_eq!(ByteStr::from($value), ByteStr::from($expected), $msg)
-        };
-    }
-
-    impl fmt::Debug for ByteStr {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "b\"{}\"", self)
-        }
-    }
+    use crate::testing::ByteStr;
+    use crate::assert_eq_bytes;
 
     #[test]
     fn reads_line_and_echoes() {
@@ -467,11 +456,193 @@ mod test_input_reader {
         assert_eq_bytes!(buffer.get_ref(), b"echo hat", "buffer");
         assert_eq_bytes!(output, b"echo that\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[0Khat\x1b[3D", "output");
     }
+
+    #[test]
+    fn delete_previous_char() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        let mut input = Cursor::new(b"echo hat\x7f\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo ha", "buffer");
+        assert_eq_bytes!(output, b"echo hat\x08\x1b[0K", "output");
+    }
+
+    #[test]
+    fn delete_previous_word() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        let mut input = Cursor::new(b"echo hello world\x17\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo hello ", "buffer");
+        assert_eq_bytes!(output, b"echo hello world\x1b[5D\x1b[0K", "output");
+    }
+
+    #[test]
+    fn delete_previous_word_middle() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        let mut input = Cursor::new(b"echo hello world\x1b[D\x1b[D\x1b[D\x1b[D\x1b[D\x1b[D\x17\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo  world", "buffer");
+        assert_eq_bytes!(output, b"echo hello world\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[5D\x1b[0K world\x1b[6D", "output");
+    }
+
+    #[test]
+    fn delete_previous_word_middle_utf8() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        // maçã
+        let mut input = Cursor::new(b"echo ma\xc3\xa7\xc3\xa3\x1b[D\x17\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo \xc3\xa3", "buffer");
+        assert_eq_bytes!(output, b"echo ma\xc3\xa7\xc3\xa3\x1b[1D\x1b[3D\x1b[0K\xc3\xa3\x1b[1D", "output");
+    }
+
+    #[test]
+    fn insert_literal_ctrl_d_at_end() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        // Ctrl+V Ctrl+D
+        let mut input = Cursor::new(b"echo test\x16\x04\n");
+
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+
+        assert_eq_bytes!(
+            buffer.get_ref(),
+            b"echo test\x04",
+            "buffer"
+        );
+
+        assert_eq_bytes!(
+            output,
+            b"echo test\x04",
+            "output"
+        );
+    }
+
+    #[test]
+    fn insert_literal_ctrl_d_in_middle() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        // Move left 3, then Ctrl+V Ctrl+D
+        let mut input = Cursor::new(
+            b"echo hat\x1b[D\x1b[D\x1b[D\x16\x04\n"
+        );
+
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo \x04hat", "buffer");
+
+        // Expected ideal incremental redraw
+        assert_eq_bytes!(
+            output, b"echo hat\x1b[1D\x1b[1D\x1b[1D\x1b[0K\x04hat\x1b[3D", "output");
+    }
+
+    #[test]
+    fn insert_literal_ctrl_w() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        // Ctrl+V Ctrl+W
+        let mut input = Cursor::new(
+            b"echo hello\x16\x17\n"
+        );
+
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo hello\x17", "buffer");
+        assert_eq_bytes!(output, b"echo hello\x17", "output");
+    }
+
+    #[test]
+    fn insert_literal_after_cursor_move() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        let mut input = Cursor::new(b"abcd\x1b[D\x1b[D\x16x\n");
+
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"abxcd", "buffer");
+        assert_eq_bytes!(output, b"abcd\x1b[1D\x1b[1D\x1b[0Kxcd\x1b[2D", "output");
+    }
+
+    #[test]
+    fn insert_literal_escape() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        // Ctrl+V ESC
+        let mut input = Cursor::new(b"test\x16\x1b\n");
+
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"test\x1b", "buffer");
+        assert_eq_bytes!(output, b"test\x1b", "output");
+    }
 }
 
 #[cfg(test)]
-mod handle_werase_byte {
-    use super::handle_werase_byte;
+mod test_handle_werase_byte {
+    use super::*;
+    use crate::testing::ByteVec;
+    use crate::assert_eq_bytes_vec;
 
     const EMPTY: Vec<Vec<u8>> = vec![];
 
@@ -487,80 +658,95 @@ mod handle_werase_byte {
             .map(|byte_array: &[u8]| byte_array.to_vec()))
     }
 
-    fn assert_handle_werase_byte(input: Vec<Vec<u8>>, expected: Vec<Vec<u8>>) {
-        let output: Vec<Vec<u8>> = handle_werase_byte(input.clone());
+    fn assert_handle_werase_byte(
+        input: Vec<Vec<u8>>,
+        expected: Vec<Vec<u8>>,
+        index: usize,
+    ) {
+        let output: Vec<Vec<u8>> = handle_werase_byte(input.clone(), index);
 
         let mut input_string: Vec<u8> = Vec::new();
         let mut output_string: Vec<u8> = Vec::new();
         let mut expected_string: Vec<u8> = Vec::new();
 
-        for bytes in input { for byte in bytes { input_string.push(byte); } }
+        for bytes in input {
+            input_string.extend(bytes);
+        }
 
         for bytes in &output {
-            for byte in bytes { output_string.push(*byte); }
+            output_string.extend(bytes);
         }
 
         for bytes in &expected {
-            for byte in bytes { expected_string.push(*byte); }
+            expected_string.extend(bytes);
         }
 
-        assert_eq!(output, expected,
-            "\n   input: {:?}\n  output: {:?}\nexpected: {:?}\n",
+        assert_eq_bytes_vec!(output, expected,
+            "\n   input: ({:?}, {})\n  output: {:?}\nexpected: {:?}\n",
             String::from_utf8(input_string).unwrap(),
+            index,
             String::from_utf8(output_string).unwrap(),
             String::from_utf8(expected_string).unwrap());
     }
 
     #[test]
+    fn erase_word_in_middle() {
+        let bytes = parse_bytes(b"one two three four five");
+        assert_handle_werase_byte(bytes, parse_bytes(b"one two ee four five"), 11);
+    }
+
+    #[test]
     fn erase_last_space_and_word() {
         let bytes1 = parse_bytes(b"This isn't a coke ");
-        assert_handle_werase_byte(bytes1, parse_bytes(b"This isn't a "));
+        let size1 = bytes1.len();
+        assert_handle_werase_byte(bytes1, parse_bytes(b"This isn't a "), size1);
 
         let bytes2 = parse_bytes(b"It is passion fruit juice...  ");
-        assert_handle_werase_byte(bytes2, parse_bytes(b"It is passion fruit "));
+        let size2 = bytes2.len();
+        assert_handle_werase_byte(bytes2, parse_bytes(b"It is passion fruit "), size2);
     }
 
     #[test]
     fn erase_last_word() {
         let bytes1 = parse_bytes(b"morango melancia abacaxi");
-        assert_handle_werase_byte(bytes1, parse_bytes(b"morango melancia "));
+        assert_handle_werase_byte(bytes1, parse_bytes(b"morango melancia "), 24);
 
         let bytes2 = parse_text(
             "cérebro e coração são órgãos do corpo humano");
         assert_handle_werase_byte(bytes2,
-            parse_text("cérebro e coração são órgãos do corpo "));
+            parse_text("cérebro e coração são órgãos do corpo "), 50);
 
         let bytes3 = parse_text("suco  de  maracujá");
-        assert_handle_werase_byte(bytes3, parse_bytes(b"suco  de  "));
+        assert_handle_werase_byte(bytes3, parse_bytes(b"suco  de  "), 19);
     }
 
     #[test]
     fn erase_first_space() {
         let bytes1 = parse_bytes(b" ");
-        assert_handle_werase_byte(bytes1, EMPTY);
+        assert_handle_werase_byte(bytes1, EMPTY, 1);
 
         let bytes2 = parse_bytes(b"    ");
-        assert_handle_werase_byte(bytes2, EMPTY);
+        assert_handle_werase_byte(bytes2, EMPTY, 4);
 
         let bytes3 = parse_bytes(b"\t");
-        assert_handle_werase_byte(bytes3, EMPTY);
+        assert_handle_werase_byte(bytes3, EMPTY, 1);
     }
 
     #[test]
     fn erase_first_word() {
         let bytes1 = parse_text("morango");
-        assert_handle_werase_byte(bytes1, EMPTY);
+        assert_handle_werase_byte(bytes1, EMPTY, 7);
 
         let bytes2 = parse_text("maçã");
-        assert_handle_werase_byte(bytes2, EMPTY);
+        assert_handle_werase_byte(bytes2, EMPTY, 6);
 
         let bytes3 = parse_text("maracujá");
-        assert_handle_werase_byte(bytes3, EMPTY);
+        assert_handle_werase_byte(bytes3, EMPTY, 9);
     }
 
     #[test]
     fn do_nothing() {
         let bytes = EMPTY;
-        assert_handle_werase_byte(bytes, EMPTY);
+        assert_handle_werase_byte(bytes, EMPTY, 0);
     }
 }
