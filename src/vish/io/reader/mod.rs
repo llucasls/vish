@@ -1,7 +1,8 @@
-use std::io::{self, Read, Write, Stdin, Stdout};
+use std::io::{self, Read, Write};
+use std::mem::replace;
 
 use termios::*;
-use termios::os::target::{VWERASE, VREPRINT};
+use termios::os::target::{VWERASE, VREPRINT, VLNEXT};
 
 use crate::vish::buffer::Buffer;
 use crate::{kill_line, move_cursor, reprint_line};
@@ -84,7 +85,12 @@ macro_rules! delete_char {
 
 macro_rules! go_to_start {
     ($index:expr, $stdout:expr) => {{
-        move_cursor!(-($index as isize), $stdout);
+        let ps1 = match $crate::ENV.read() {
+            Ok(shell) => shell.get_var("PS1").unwrap_or_default(),
+            Err(_) => String::new(),
+        };
+        $stdout.write_all(b"\r")?;
+        move_cursor!(ps1.len(), $stdout);
         $stdout.flush()?;
         $index = 0;
         continue;
@@ -131,26 +137,22 @@ macro_rules! move_right {
     }}
 }
 
-pub struct InputReader {
-    termios: Termios,
-    default: Termios,
-    stdin: Stdin,
-    stdout: Stdout,
+pub enum ReadAction {
+    Line,
+    Eof,
 }
 
-impl InputReader {
+pub struct Terminal {
+    pub termios: Termios,
+    pub default: Termios,
+}
+
+impl Terminal {
     pub fn new() -> io::Result<Self> {
         let termios = Termios::from_fd(0)?;
         let default = termios;
-        let stdin = io::stdin();
-        let stdout = io::stdout();
 
-        Ok(Self { termios, default, stdin, stdout })
-    }
-
-    pub fn enable_raw_mode(&mut self) -> io::Result<()> {
-        self.termios.c_lflag &= !ICANON & !ECHO;
-        tcsetattr(0, TCSANOW, &self.termios)
+        Ok(Self { termios, default })
     }
 
     pub fn disable_raw_mode(&self) -> io::Result<()> {
@@ -162,42 +164,83 @@ impl InputReader {
         }
     }
 
-    pub fn read_input(&mut self, buffer: &mut Buffer) -> io::Result<Option<()>> {
+    pub fn enable_raw_mode(&mut self) -> io::Result<()> {
+        self.termios.c_lflag &= !ICANON & !ECHO & !IEXTEN;
+        tcsetattr(0, TCSANOW, &self.termios)
+    }
+
+    pub fn read_input<R, W>(
+        &mut self,
+        buffer: &mut Buffer,
+        stdin: R,
+        stdout: &mut W,
+    ) -> io::Result<ReadAction>
+    where
+        R: Read,
+        W: Write,
+    {
         let eof_char = self.termios.c_cc[VEOF];
         let erase_char = self.termios.c_cc[VERASE];
         let werase_char = self.termios.c_cc[VWERASE];
         let kill_char = self.termios.c_cc[VKILL];
         let reprint_char = self.termios.c_cc[VREPRINT];
+        let lnext_char = self.termios.c_cc[VLNEXT];
 
         let mut outer_vector: Vec<Vec<u8>> = Vec::with_capacity(256);
         let mut inner_vector: Vec<u8> = Vec::with_capacity(4);
         let mut index: usize = 0;
+        let mut insert_literal: bool = false;
 
-        for byte_result in self.stdin.lock().bytes() {
+        #[allow(clippy::unbuffered_bytes)]
+        for byte_result in stdin.bytes() {
             let byte = byte_result?;
 
             match byte {
+                _ if insert_literal => {
+                    inner_vector.push(byte);
+                    if std::str::from_utf8(inner_vector.as_slice()).is_err() {
+                        continue;
+                    } else if index < outer_vector.len() {
+                        reprint_line!(stdout, &outer_vector);
+                        move_cursor!(1, stdout);
+                        let new_vec = Vec::with_capacity(4);
+                        let bytes = replace(&mut inner_vector, new_vec);
+                        outer_vector.insert(index, bytes);
+                    } else {
+                        stdout.write_all(inner_vector.as_slice())?;
+                        let new_vec = Vec::with_capacity(4);
+                        let bytes = replace(&mut inner_vector, new_vec);
+                        outer_vector.push(bytes);
+                    }
+                    stdout.flush()?;
+                    index += 1;
+                    insert_literal = false;
+                },
+                b if b == lnext_char => {
+                    insert_literal = true;
+                },
                 b if b == erase_char && index == 0 => { continue; },
-                b if b == erase_char => delete_previous_char!(
-                    index, outer_vector, self.stdout
-                ),
+                0x08 | 0x7f if index == 0 => { continue; },
+                b if b == erase_char || b == 0x08 || b == 0x7f => {
+                    delete_previous_char!(index, outer_vector, stdout)
+                },
                 b if b == werase_char => delete_previous_word!(
-                    index, outer_vector, self.stdout
+                    index, outer_vector, stdout
                 ),
                 b if b == kill_char => erase_line!(
-                    index, outer_vector, inner_vector, self.stdout
+                    index, outer_vector, inner_vector, stdout
                 ),
                 b if b == reprint_char => reprint_line!(
-                    self.stdout, outer_vector
+                    stdout, outer_vector
                 ),
                 b if b == eof_char && outer_vector.is_empty() => {
-                    return Ok(None);
+                    return Ok(ReadAction::Eof);
                 },
                 b if b == eof_char => delete_char!(
-                    index, outer_vector, self.stdout
+                    index, outer_vector, stdout
                 ),
-                0x01 => go_to_start!(index, self.stdout),
-                0x05 => go_to_end!(index, outer_vector, self.stdout),
+                0x01 => go_to_start!(index, stdout),
+                0x05 => go_to_end!(index, outer_vector, stdout),
                 0x1b => store_byte!(byte, inner_vector),
                 b'[' if inner_vector.as_slice() == b"\x1b" => store_byte!(
                     byte, inner_vector
@@ -211,56 +254,46 @@ impl InputReader {
                     continue;
                 },
                 RIGHT if matches!(inner_vector.as_slice(), b"\x1b[") => {
-                    move_right!(index, inner_vector, outer_vector, self.stdout);
+                    move_right!(index, inner_vector, outer_vector, stdout);
                 },
                 LEFT if matches!(inner_vector.as_slice(), b"\x1b[") => {
-                    move_left!(index, inner_vector, self.stdout);
+                    move_left!(index, inner_vector, stdout);
                 },
                 NEWLINE => { break; },
                 b if b < 0x20 => { continue; },
                 _ => {
                     inner_vector.push(byte);
-                    if std::str::from_utf8(inner_vector.as_slice()).is_ok() {
-                        if index < outer_vector.len() {
-                            outer_vector.insert(index, inner_vector.clone());
-                            reprint_line!(self.stdout, &outer_vector);
-                            move_cursor!(1, self.stdout);
-                        } else {
-                            outer_vector.push(inner_vector.clone());
-                            self.stdout.write_all(inner_vector.as_slice())?;
-                        }
-                        self.stdout.flush()?;
-                        index += 1;
-                        inner_vector.clear();
-                    } else {
+                    if std::str::from_utf8(inner_vector.as_slice()).is_err() {
                         continue;
+                    } else if index < outer_vector.len() {
+                        let new_vec = Vec::with_capacity(4);
+                        let bytes = replace(&mut inner_vector, new_vec);
+                        outer_vector.insert(index, bytes);
+                        reprint_line!(stdout, &outer_vector);
+                        move_cursor!(1, stdout);
+                    } else {
+                        let new_vec = Vec::with_capacity(4);
+                        let bytes = replace(&mut inner_vector, new_vec);
+                        stdout.write_all(&bytes)?;
+                        outer_vector.push(bytes);
                     }
+                    stdout.flush()?;
+                    index += 1;
                 }
             }
         }
 
         for vec in outer_vector {
             if let Ok(s) = std::str::from_utf8(&vec) {
-                buffer.write(s.as_bytes())?;
+                buffer.write_all(s.as_bytes())?;
             }
         }
 
-        Ok(Some(()))
+        Ok(ReadAction::Line)
     }
 }
 
-impl Clone for InputReader {
-    fn clone(&self) -> Self {
-        Self {
-            termios: self.termios,
-            default: self.default,
-            stdin: io::stdin(),
-            stdout: io::stdout(),
-        }
-    }
-}
-
-impl Drop for InputReader {
+impl Drop for Terminal {
     fn drop(&mut self) {
         if let Err(e) = self.disable_raw_mode() {
             eprintln!("vish: failed to cleanup terminal: {:?}", e);

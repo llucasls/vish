@@ -10,9 +10,10 @@ use std::fmt::format;
 use std::path::PathBuf;
 
 use libc::{self, pid_t};
+use termios::{tcsetattr, TCSANOW};
 
 use super::buffer::Buffer;
-use super::io::InputReader;
+use super::io::Terminal;
 
 use crate::shell::ShellVarError;
 
@@ -361,7 +362,7 @@ pub fn echo(argv: ArgV) -> u8 {
     0
 }
 
-pub fn exec(argv: ArgV, reader: &mut InputReader) -> u8 {
+pub fn exec(argv: ArgV, terminal: &mut Terminal) -> u8 {
     if argv.len() < 2 {
         eprintln!("vish: exec: no command passed to exec");
         return 1;
@@ -370,19 +371,17 @@ pub fn exec(argv: ArgV, reader: &mut InputReader) -> u8 {
     let cmd = &argv[1];
     let args = &argv[2..];
 
+    let default = terminal.default;
+    let restore_terminal = move || tcsetattr(0, TCSANOW, &default);
+
     let err = unsafe {
         Command::new(cmd)
             .args(args)
-            .pre_exec({
-                let reader = reader.clone();
-                move || {
-                    reader.disable_raw_mode()
-                }
-            })
+            .pre_exec(restore_terminal)
             .exec()
     };
 
-    if let Err(e) = reader.enable_raw_mode() {
+    if let Err(e) = terminal.enable_raw_mode() {
         eprintln!("warning: failed to reactivate raw mode: {}", e);
     }
 

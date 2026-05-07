@@ -5,7 +5,7 @@ use std::os::unix::process::ExitStatusExt;
 
 use crate::vish::buffer::Buffer;
 use crate::vish::command::{self as cmd};
-use crate::vish::io::InputReader;
+use crate::vish::io::reader::{Terminal, ReadAction};
 use crate::vish::string::parse_argv;
 
 pub struct App;
@@ -36,7 +36,9 @@ impl App {
         AppStatus::ok()
     }
 
-    fn handle_interactive_mode(reader: &mut InputReader) -> AppStatus {
+    fn handle_interactive_mode(terminal: &mut Terminal) -> AppStatus
+    {
+        let stdin = io::stdin();
         let mut stdout = io::stdout();
 
         macro_rules! draw_prompt {
@@ -61,7 +63,7 @@ impl App {
             }}
         }
 
-        if reader.enable_raw_mode().is_err() {
+        if terminal.enable_raw_mode().is_err() {
             return Self::handle_fallback_mode();
         }
 
@@ -78,9 +80,9 @@ impl App {
                 flush!(stdout);
             }
 
-            match reader.read_input(&mut buffer) {
-                Ok(Some(())) => {},
-                Ok(None) => {
+            match terminal.read_input(&mut buffer, &stdin, &mut stdout) {
+                Ok(ReadAction::Line) => {},
+                Ok(ReadAction::Eof) => {
                     if should_clear_buffer {
                         println!();
                         break last_cmd_code;
@@ -138,7 +140,7 @@ impl App {
                 "pwd" => cmd::pwd(argv),
                 "printf" => cmd::printf(argv),
                 "echo" => cmd::echo(argv),
-                "exec" => cmd::exec(argv, reader),
+                "exec" => cmd::exec(argv, terminal),
                 "exit" => { break cmd::exit(argv, last_cmd_code); },
                 "true" => 0,
                 "false" => 1,
@@ -159,8 +161,8 @@ impl App {
     }
 
     pub fn main() -> impl Termination {
-        match InputReader::new() {
-            Ok(mut reader) => Self::handle_interactive_mode(&mut reader),
+        match Terminal::new() {
+            Ok(mut terminal) => Self::handle_interactive_mode(&mut terminal),
             Err(_) => Self::handle_batch_mode(),
         }
     }

@@ -1,3 +1,3 @@
 pub mod reader;
 
-pub use reader::InputReader;
+pub use reader::Terminal;
