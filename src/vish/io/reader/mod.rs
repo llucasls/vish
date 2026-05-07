@@ -436,11 +436,11 @@ mod handle_werase_byte {
         for bytes in input { for byte in bytes { input_string.push(byte); } }
 
         for bytes in &output {
-            for byte in bytes { output_string.push(byte.clone()); }
+            for byte in bytes { output_string.push(*byte); }
         }
 
         for bytes in &expected {
-            for byte in bytes { expected_string.push(byte.clone()); }
+            for byte in bytes { expected_string.push(*byte); }
         }
 
         assert_eq!(output, expected,

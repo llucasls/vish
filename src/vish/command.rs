@@ -594,6 +594,19 @@ fn replace_escape_sequence(input: &[u8]) -> Vec<u8> {
     output
 }
 
+fn print_os_string(text: OsString) {
+    let mut dir_path = OsString::new();
+    dir_path.push(text);
+    let output: Vec<_> = format(format_args!("{:?}", dir_path))
+        .chars()
+        .collect::<Vec<_>>()[1..]
+        .to_vec();
+    for character in output.iter().take(output.len() - 1) {
+        print!("{}", character);
+    }
+    println!();
+}
+
 #[cfg(test)]
 mod replace_escape_sequence {
     use super::replace_escape_sequence;
@@ -615,17 +628,4 @@ mod replace_escape_sequence {
         let input = &br"\e[".to_vec();
         assert_eq!(replace_escape_sequence(input), b"\x1b[");
     }
-}
-
-fn print_os_string(text: OsString) {
-    let mut dir_path = OsString::new();
-    dir_path.push(text);
-    let output: Vec<_> = format(format_args!("{:?}", dir_path))
-        .chars()
-        .collect::<Vec<_>>()[1..]
-        .to_vec();
-    for character in output.iter().take(output.len() - 1) {
-        print!("{}", character);
-    }
-    println!();
 }
