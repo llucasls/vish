@@ -38,8 +38,13 @@ macro_rules! delete_previous_char {
     ($index:expr, $vector:expr, $stdout:expr) => {{
         $index -= 1;
         $vector.remove($index);
-        $stdout.write_all(b"\x08")?;
-        reprint_line!($stdout, $vector);
+        write!($stdout, "\x08\x1b[0K")?;
+        for bytes in &$vector[$index..] {
+            let c = str::from_utf8(bytes).unwrap();
+            write!($stdout, "{}", c)?;
+        }
+        let remaining = $vector.len() - $index;
+        move_cursor!(-(remaining as isize), $stdout);
         $stdout.flush()?;
         continue;
     }}
@@ -75,7 +80,13 @@ macro_rules! delete_char {
     ($index:expr, $vector:expr, $stdout:expr) => {{
         if $index < $vector.len() {
             $vector.remove($index);
-            reprint_line!($stdout, &$vector);
+            write!($stdout, "\x1b[0K")?;
+            for bytes in &$vector[$index..] {
+                let c = str::from_utf8(bytes).unwrap();
+                write!($stdout, "{}", c)?;
+            }
+            let remaining = $vector.len() - $index;
+            move_cursor!(-(remaining as isize), $stdout);
             $stdout.flush()?;
         }
         continue;
@@ -83,13 +94,8 @@ macro_rules! delete_char {
 }
 
 macro_rules! go_to_start {
-    ($index:expr, $stdout:expr) => {{
-        let ps1 = match $crate::ENV.read() {
-            Ok(shell) => shell.get_var("PS1").unwrap_or_default(),
-            Err(_) => String::new(),
-        };
-        $stdout.write_all(b"\r")?;
-        move_cursor!(ps1.len(), $stdout);
+    ($index:expr, $line:expr, $stdout:expr) => {{
+        move_cursor!(-($index as isize), $stdout);
         $stdout.flush()?;
         $index = 0;
         continue;
@@ -238,7 +244,7 @@ impl Terminal {
                 b if b == eof_char => delete_char!(
                     index, outer_vector, stdout
                 ),
-                0x01 => go_to_start!(index, stdout),
+                0x01 => go_to_start!(index, outer_vector, stdout),
                 0x05 => go_to_end!(index, outer_vector, stdout),
                 0x1b => store_byte!(byte, inner_vector),
                 b'[' if inner_vector.as_slice() == b"\x1b" => store_byte!(
@@ -267,9 +273,14 @@ impl Terminal {
                     } else if index < outer_vector.len() {
                         let new_vec = Vec::with_capacity(4);
                         let bytes = replace(&mut inner_vector, new_vec);
+                        write!(stdout, "\x1b[0K")?;
                         outer_vector.insert(index, bytes);
-                        reprint_line!(stdout, &outer_vector);
-                        move_cursor!(1, stdout);
+                        for bytes in &outer_vector[index..] {
+                            let c = str::from_utf8(bytes).unwrap();
+                            write!(stdout, "{}", c)?;
+                        }
+                        let remaining = outer_vector.len() - index - 1;
+                        move_cursor!(-(remaining as isize), stdout);
                     } else {
                         let new_vec = Vec::with_capacity(4);
                         let bytes = replace(&mut inner_vector, new_vec);
@@ -289,6 +300,14 @@ impl Terminal {
         }
 
         Ok(ReadAction::Line)
+    }
+}
+
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        if let Err(e) = self.disable_raw_mode() {
+            eprintln!("vish: failed to cleanup terminal: {:?}", e);
+        }
     }
 }
 
@@ -395,15 +414,58 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"s", "buffer");
-        assert_eq_bytes!(output, b"ls\x1b[1D\x1b[1D\x1b[2K\r$ s", "output");
+        assert_eq_bytes!(output, b"ls\x1b[1D\x1b[1D\x1b[0Ks\x1b[1D", "output");
     }
-}
 
-impl Drop for Terminal {
-    fn drop(&mut self) {
-        if let Err(e) = self.disable_raw_mode() {
-            eprintln!("vish: failed to cleanup terminal: {:?}", e);
-        }
+    #[test]
+    fn move_back_and_insert_character() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        let mut input = Cursor::new(b"echo hat\x1b[D\x1b[D\x1b[Dt\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo that", "buffer");
+        assert_eq_bytes!(output, b"echo hat\x1b[1D\x1b[1D\x1b[1D\x1b[0Kthat\x1b[3D", "output");
+    }
+
+    #[test]
+    fn move_back_and_delete_character() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        let mut input = Cursor::new(b"echo that\x1b[D\x1b[D\x1b[D\x7f\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo hat", "buffer");
+        assert_eq_bytes!(output, b"echo that\x1b[1D\x1b[1D\x1b[1D\x08\x1b[0Khat\x1b[3D", "output");
+    }
+
+    #[test]
+    fn move_back_and_delete_character_with_ctrl_d() {
+        let mut terminal = Terminal::new().unwrap();
+        let mut buffer = Cursor::new(Vec::new());
+
+        let mut input = Cursor::new(b"echo that\x1b[D\x1b[D\x1b[D\x1b[D\x04\n");
+        let mut output = Vec::new();
+
+        let action = terminal
+            .read_input(&mut buffer, &mut input, &mut output)
+            .unwrap();
+
+        assert!(matches!(action, ReadAction::Line));
+        assert_eq_bytes!(buffer.get_ref(), b"echo hat", "buffer");
+        assert_eq_bytes!(output, b"echo that\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[0Khat\x1b[3D", "output");
     }
 }
 
