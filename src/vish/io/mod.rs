@@ -62,13 +62,12 @@ macro_rules! delete_previous_char {
     ($index:expr, $vector:expr, $stdout:expr) => {{
         $index -= 1;
         $vector.remove($index);
-        write!($stdout, "\x08\x1b[0K")?;
+        let length = $vector.len() - $index;
+        write!($stdout, "\x08\x1b[{}X", length + 1)?;
         for bytes in &$vector[$index..] {
-            let c = str::from_utf8(bytes).unwrap();
-            write!($stdout, "{}", c)?;
+            $stdout.write_all(bytes)?;
         }
-        let remaining = $vector.len() - $index;
-        move_cursor!(-(remaining as isize), $stdout);
+        move_cursor!(-(length as isize), $stdout);
         $stdout.flush()?;
         continue;
     }}
@@ -82,10 +81,9 @@ macro_rules! delete_previous_word {
         let diff = previous_length - resulting_length;
         $index -= diff;
         move_cursor!(-(diff as isize), $stdout);
-        write!($stdout, "\x1b[0K")?;
+        write!($stdout, "\x1b[{}X", previous_length - $index)?;
         for bytes in &$vector[$index..] {
-            let c = str::from_utf8(bytes).unwrap();
-            write!($stdout, "{}", c)?;
+            $stdout.write_all(bytes)?;
         }
         let remaining = $vector.len() - $index;
         move_cursor!(-(remaining as isize), $stdout);
@@ -109,13 +107,12 @@ macro_rules! delete_char {
     ($index:expr, $vector:expr, $stdout:expr) => {{
         if $index < $vector.len() {
             $vector.remove($index);
-            write!($stdout, "\x1b[0K")?;
+            let length = $vector.len() - $index;
+            write!($stdout, "\x1b[{}X", length + 1)?;
             for bytes in &$vector[$index..] {
-                let c = str::from_utf8(bytes).unwrap();
-                write!($stdout, "{}", c)?;
+                $stdout.write_all(bytes)?;
             }
-            let remaining = $vector.len() - $index;
-            move_cursor!(-(remaining as isize), $stdout);
+            move_cursor!(-(length as isize), $stdout);
             $stdout.flush()?;
         }
         continue;
@@ -237,15 +234,13 @@ impl Terminal {
                     } else if index < outer_vector.len() {
                         let new_vec = Vec::with_capacity(4);
                         let bytes = replace(&mut inner_vector, new_vec);
-                        write!(stdout, "\x1b[0K")?;
-                        write!(stdout, "{}", str::from_utf8(&bytes).unwrap_or_default())?;
+                        let length = outer_vector.len() - index;
+                        write!(stdout, "\x1b[{}X", length)?;
+                        stdout.write_all(&bytes)?;
                         for bytes in &outer_vector[index..] {
-                            let c = str::from_utf8(&bytes).unwrap();
-                            write!(stdout, "{}", c)?;
+                            stdout.write_all(&bytes)?;
                         }
-                        let remaining = index as isize
-                            - outer_vector.len() as isize;
-                        move_cursor!(remaining, stdout);
+                        move_cursor!(-(length as isize), stdout);
                         outer_vector.insert(index, bytes);
                     } else {
                         stdout.write_all(inner_vector.as_slice())?;
@@ -309,14 +304,13 @@ impl Terminal {
                     } else if index < outer_vector.len() {
                         let new_vec = Vec::with_capacity(4);
                         let bytes = replace(&mut inner_vector, new_vec);
-                        write!(stdout, "\x1b[0K")?;
+                        let length = outer_vector.len() - index;
+                        write!(stdout, "\x1b[{}X", length)?;
                         outer_vector.insert(index, bytes);
                         for bytes in &outer_vector[index..] {
-                            let c = str::from_utf8(bytes).unwrap();
-                            write!(stdout, "{}", c)?;
+                            stdout.write_all(bytes)?;
                         }
-                        let remaining = outer_vector.len() - index - 1;
-                        move_cursor!(-(remaining as isize), stdout);
+                        move_cursor!(-(length as isize), stdout);
                     } else {
                         let new_vec = Vec::with_capacity(4);
                         let bytes = replace(&mut inner_vector, new_vec);
@@ -403,7 +397,7 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"s", "buffer");
-        assert_eq_bytes!(output, b"ls\x1b[1D\x1b[1D\x1b[0Ks\x1b[1D", "output");
+        assert_eq_bytes!(output, b"ls\x1b[1D\x1b[1D\x1b[2Xs\x1b[1D", "output");
     }
 
     #[test]
@@ -420,7 +414,7 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"echo that", "buffer");
-        assert_eq_bytes!(output, b"echo hat\x1b[1D\x1b[1D\x1b[1D\x1b[0Kthat\x1b[3D", "output");
+        assert_eq_bytes!(output, b"echo hat\x1b[1D\x1b[1D\x1b[1D\x1b[3Xthat\x1b[3D", "output");
     }
 
     #[test]
@@ -437,7 +431,7 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"echo hat", "buffer");
-        assert_eq_bytes!(output, b"echo that\x1b[1D\x1b[1D\x1b[1D\x08\x1b[0Khat\x1b[3D", "output");
+        assert_eq_bytes!(output, b"echo that\x1b[1D\x1b[1D\x1b[1D\x08\x1b[4Xhat\x1b[3D", "output");
     }
 
     #[test]
@@ -454,7 +448,7 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"echo hat", "buffer");
-        assert_eq_bytes!(output, b"echo that\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[0Khat\x1b[3D", "output");
+        assert_eq_bytes!(output, b"echo that\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[4Xhat\x1b[3D", "output");
     }
 
     #[test]
@@ -471,7 +465,7 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"echo ha", "buffer");
-        assert_eq_bytes!(output, b"echo hat\x08\x1b[0K", "output");
+        assert_eq_bytes!(output, b"echo hat\x08\x1b[1X", "output");
     }
 
     #[test]
@@ -488,7 +482,7 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"echo hello ", "buffer");
-        assert_eq_bytes!(output, b"echo hello world\x1b[5D\x1b[0K", "output");
+        assert_eq_bytes!(output, b"echo hello world\x1b[5D\x1b[5X", "output");
     }
 
     #[test]
@@ -505,7 +499,7 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"echo  world", "buffer");
-        assert_eq_bytes!(output, b"echo hello world\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[5D\x1b[0K world\x1b[6D", "output");
+        assert_eq_bytes!(output, b"echo hello world\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[1D\x1b[5D\x1b[11X world\x1b[6D", "output");
     }
 
     #[test]
@@ -523,7 +517,7 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"echo \xc3\xa3", "buffer");
-        assert_eq_bytes!(output, b"echo ma\xc3\xa7\xc3\xa3\x1b[1D\x1b[3D\x1b[0K\xc3\xa3\x1b[1D", "output");
+        assert_eq_bytes!(output, b"echo ma\xc3\xa7\xc3\xa3\x1b[1D\x1b[3D\x1b[4X\xc3\xa3\x1b[1D", "output");
     }
 
     #[test]
@@ -541,18 +535,8 @@ mod test_input_reader {
             .unwrap();
 
         assert!(matches!(action, ReadAction::Line));
-
-        assert_eq_bytes!(
-            buffer.get_ref(),
-            b"echo test\x04",
-            "buffer"
-        );
-
-        assert_eq_bytes!(
-            output,
-            b"echo test\x04",
-            "output"
-        );
+        assert_eq_bytes!(buffer.get_ref(), b"echo test\x04", "buffer");
+        assert_eq_bytes!(output, b"echo test\x04", "output");
     }
 
     #[test]
@@ -576,7 +560,7 @@ mod test_input_reader {
 
         // Expected ideal incremental redraw
         assert_eq_bytes!(
-            output, b"echo hat\x1b[1D\x1b[1D\x1b[1D\x1b[0K\x04hat\x1b[3D", "output");
+            output, b"echo hat\x1b[1D\x1b[1D\x1b[1D\x1b[3X\x04hat\x1b[3D", "output");
     }
 
     #[test]
@@ -615,7 +599,7 @@ mod test_input_reader {
 
         assert!(matches!(action, ReadAction::Line));
         assert_eq_bytes!(buffer.get_ref(), b"abxcd", "buffer");
-        assert_eq_bytes!(output, b"abcd\x1b[1D\x1b[1D\x1b[0Kxcd\x1b[2D", "output");
+        assert_eq_bytes!(output, b"abcd\x1b[1D\x1b[1D\x1b[2Xxcd\x1b[2D", "output");
     }
 
     #[test]
