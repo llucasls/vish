@@ -1,7 +1,7 @@
 use std::fs;
-use std::io::{self, Cursor};
+use std::io::{self, Cursor, ErrorKind};
 use std::process::Command;
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::io::ErrorKind::{NotFound, PermissionDenied, InvalidInput};
 use std::env::{self, set_current_dir, current_dir};
 use std::cmp::Ordering;
@@ -221,15 +221,57 @@ macro_rules! error_msg {
 
 pub fn run_command(argv: ArgV) -> u8 {
     if argv.is_empty() {
-        eprintln!("no command was provided");
+        eprintln!("vish: no command was provided");
         return 1;
     }
 
     let cmd = &argv[0];
     let args = &argv[1..];
-    match Command::new(cmd).args(args).process_group(0).status() {
-        Ok(status) => status.code().unwrap_or(1) as u8,
-        Err(_) => 1,
+
+    match Command::new(cmd).args(args).status() {
+        Ok(status) => {
+            match (status.code(), status.signal()) {
+                (Some(code), None) => code as u8,
+                (None, Some(signal)) => 128 + signal as u8,
+                _ => 128,
+            }
+        }
+        Err(e) => {
+            match e.kind() {
+                ErrorKind::NotFound => {
+                    eprintln!("vish: {}: command not found", cmd);
+                    127
+                },
+                ErrorKind::PermissionDenied => {
+                    eprintln!("vish: {}: permission denied", cmd);
+                    126
+                },
+                ErrorKind::InvalidInput => {
+                    eprintln!("vish: {}: invalid argument or path", cmd);
+                    1
+                },
+                ErrorKind::IsADirectory => {
+                    eprintln!("vish: {}: is a directory", cmd);
+                    126
+                },
+                ErrorKind::ExecutableFileBusy => {
+                    eprintln!("vish: {}: executable file busy", cmd);
+                    126
+                },
+                ErrorKind::ArgumentListTooLong => {
+                    eprintln!("vish: argument list too long");
+                    126
+                },
+                ErrorKind::Interrupted => {
+                    eprintln!("vish: {}: interrupted", cmd);
+                    130
+                },
+                _ => {
+                    eprintln!("vish: {}: {}", cmd, e);
+                    1
+                },
+            }
+        }
     }
 }
 
