@@ -1,7 +1,7 @@
 #[cfg(not(test))]
 use std::env::var as get_var;
 
-use crate::vish::command::ArgV;
+use crate::executor::command::ArgV;
 
 mod expand_parameter;
 pub use expand_parameter::expand_parameter;
@@ -12,7 +12,7 @@ pub use substitute_command::substitute_command;
 mod field;
 pub use field::Field;
 
-use crate::util::Home;
+use crate::shell::util::Home;
 
 pub fn replace_tilde(user_input: String) -> String {
     let tilde_index = user_input.find('~');

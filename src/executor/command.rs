@@ -12,9 +12,9 @@ use std::path::PathBuf;
 use libc::{self, pid_t};
 use termios::{tcsetattr, TCSANOW};
 
-use super::io::Terminal;
+use crate::io::Terminal;
 
-use crate::shell::ShellVarError;
+use crate::shell::environment::ShellVarError;
 
 pub type ArgV = Vec<String>;
 pub enum ShellCommand {

@@ -33,8 +33,8 @@ use std::ffi::OsString;
 use std::fmt;
 use std::process;
 
-use crate::vish::command::ArgV;
-use crate::util::{Home, get_ppid, get_uid, get_login, get_shell};
+use crate::executor::command::ArgV;
+use crate::shell::util::{Home, get_ppid, get_uid, get_login, get_shell};
 
 /// Represents the runtime context of a shell session.
 ///

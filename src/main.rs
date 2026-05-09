@@ -1,9 +1,9 @@
-pub mod app;
 pub mod shell;
-pub mod vish;
-#[doc(hidden)]
-pub mod macros;
-pub mod util;
+pub mod executor;
+pub mod expander;
+pub mod io;
+pub mod lexer;
+pub mod parser;
 
 #[cfg(test)]
 pub mod testing;
@@ -11,7 +11,7 @@ pub mod testing;
 use std::process::Termination;
 use std::sync::{Arc, LazyLock, RwLock};
 
-use crate::shell::Shell;
+use crate::shell::environment::Shell;
 
 #[doc(hidden)]
 type GlobalEnv = LazyLock<Arc<RwLock<Shell>>>;
@@ -21,5 +21,5 @@ pub static ENV: GlobalEnv = LazyLock::new(|| {
 
 #[doc(hidden)]
 fn main() -> impl Termination {
-    crate::app::App::main()
+    crate::shell::runtime::App::main()
 }

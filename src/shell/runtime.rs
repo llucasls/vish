@@ -3,9 +3,9 @@ use std::io::{self, Write, Cursor};
 use std::process::{ExitCode, ExitStatus, Termination};
 use std::os::unix::process::ExitStatusExt;
 
-use crate::vish::command::{self as cmd};
-use crate::vish::io::{Terminal, ReadAction};
-use crate::vish::string::parse_argv;
+use crate::executor::command::{self as cmd};
+use crate::io::{Terminal, ReadAction};
+use crate::expander::parse_argv;
 
 pub struct App;
 
@@ -97,7 +97,7 @@ impl App {
                 Err(e) => { return Err(e).into(); },
             }
 
-            let (argv, quote_char) = match str::from_utf8(buffer.get_ref()) {
+            let (argv, quote_char) = match std::str::from_utf8(buffer.get_ref()) {
                 Ok(text) => parse_argv(text),
                 Err(e) => {
                     should_clear_buffer = true;

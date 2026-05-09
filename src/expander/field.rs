@@ -1,4 +1,4 @@
-use crate::shell::ShellVarError;
+use crate::shell::environment::ShellVarError;
 
 /// Represents different types of shell fields, which may undergo various forms of expansion.
 #[derive(Debug, PartialEq)]
