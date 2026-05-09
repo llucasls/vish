@@ -4,11 +4,6 @@
 pub enum Token {
     /// A generic word token.
     Word(String),
-    /// An assignment word (`VAR=value`).
-    AssignmentWord(String, String),
-    /// A valid shell variable name.
-    Name(String),
-    /// A newline character.
     Newline,
     /// A file descriptor number.
     IONumber(String),
@@ -68,6 +63,16 @@ pub enum Token {
     Bang,
     /// `in`
     In,
+    /// `;`
+    Semi,
+    /// `&`
+    Ampersand,
+    /// `|`
+    Pipe,
+    /// `<`
+    Less,
+    /// `>`
+    Great,
     /// A meta-character token.
     Meta(char),
 }
