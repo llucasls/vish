@@ -276,7 +276,7 @@ impl Terminal {
                         write!(stdout, "\x1b[{}X", length)?;
                         stdout.write_all(&bytes)?;
                         for bytes in &outer_vector[index..] {
-                            stdout.write_all(&bytes)?;
+                            stdout.write_all(bytes)?;
                         }
                         move_cursor!(-(length as isize), stdout);
                         outer_vector.insert(index, bytes);
