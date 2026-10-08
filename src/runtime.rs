@@ -3,7 +3,7 @@ use std::io::{self, Write, Cursor};
 use std::process::{ExitCode, ExitStatus, Termination};
 use std::os::unix::process::ExitStatusExt;
 
-use crate::executor::command::{self as cmd};
+use crate::executor as cmd;
 use crate::io::{Terminal, ReadAction};
 use crate::expander::parse_argv;
 
@@ -12,10 +12,6 @@ pub struct App;
 pub struct AppStatus {
     msg: String,
     code: i32,
-}
-
-pub trait Fail<T> {
-    fn fail(msg: T) -> Self;
 }
 
 impl App {
@@ -176,6 +172,10 @@ impl AppStatus {
     pub fn ok() -> Self {
         Self { msg: String::new(), code: 0 }
     }
+
+    pub fn fail<T: ToString>(msg: T) -> Self {
+        Self { msg: msg.to_string(), code: 1 }
+    }
 }
 
 impl Debug for AppStatus {
@@ -195,12 +195,6 @@ impl Display for AppStatus {
         } else {
             write!(f, "{}", &self.msg)
         }
-    }
-}
-
-impl<T: ToString> Fail<T> for AppStatus {
-    fn fail(msg: T) -> Self {
-        Self { msg: msg.to_string(), code: 1 }
     }
 }
 

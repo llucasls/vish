@@ -13,10 +13,9 @@ use libc::{self, pid_t};
 use termios::{tcsetattr, TCSANOW};
 
 use crate::io::Terminal;
+use crate::environment::ShellVarError;
+use crate::types::ArgV;
 
-use crate::shell::environment::ShellVarError;
-
-pub type ArgV = Vec<String>;
 pub enum ShellCommand {
     SpBuiltin(String),
     Builtin(String),

@@ -1,13 +1,15 @@
 /// Represents tokens in the shell's lexical analysis.
 ///
 /// This enum follows the POSIX shell specification.
+#[derive(Debug, PartialEq)]
 pub enum Token {
     /// A generic word token.
     Word(String),
+    /// A token marking the end of an input line.
     Newline,
     /// A file descriptor number.
     IONumber(String),
-    /// An IO location (optionally supported).
+    /// An IO location (a variable with a file descriptor number).
     IOLocation(String),
     /// `&&`
     AndIf,
